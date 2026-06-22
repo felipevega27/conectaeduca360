@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
-import html2pdf from 'html2pdf.js';
+import * as htmlToImage from 'html-to-image';
+import jsPDF from 'jspdf';
 import CertificadoAlumnoRegular from '../../components/documentos/CertificadoAlumnoRegular';
 import CertificadoMatricula from '../../components/documentos/CertificadoMatricula';
 import InformeNotas from '../../components/documentos/InformeNotas';
 import UserAvatar from '../../components/UserAvatar';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function DirectorDocumentos() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -135,19 +137,22 @@ export default function DirectorDocumentos() {
     }
   };
 
-  const downloadPDF = (ref, fileName) => {
+  const downloadPDF = async (ref, fileName) => {
     const element = ref.current;
     if (!element) return;
     
-    const opt = {
-      margin:       0.5,
-      filename:     `${fileName}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true, windowWidth: 800 },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    
-    html2pdf().set(opt).from(element).save();
+    try {
+      const dataUrl = await htmlToImage.toJpeg(element, { quality: 0.98, pixelRatio: 2 });
+      const pdf = new jsPDF('p', 'mm', 'letter');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (element.clientHeight * pdfWidth) / element.clientWidth;
+      
+      pdf.addImage(dataUrl, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`${fileName}.pdf`);
+      toast.success(`Se ha descargado el documento: ${fileName}.pdf`);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+    }
   };
 
   const handlePrintRegular = () => downloadPDF(refRegular, `Certificado_Regular_${selectedAlumno?.rut || ''}`);
@@ -156,6 +161,7 @@ export default function DirectorDocumentos() {
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+      <Toaster position="top-right" toastOptions={{ className: 'dark:!bg-gray-800 dark:!text-white dark:border dark:!border-gray-700' }} />
       
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -313,7 +319,7 @@ export default function DirectorDocumentos() {
       )}
 
       {/* COMPONENTES OCULTOS PARA IMPRESIÓN (Off-screen) */}
-      <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', opacity: 0, pointerEvents: 'none' }}>
         {/* Vista Previa Oculta */}
         <div>
           <CertificadoAlumnoRegular ref={refRegular} alumno={selectedAlumno} fechaEmision={fechaHoy} correlativo={correlativoRandom} config={config} />
