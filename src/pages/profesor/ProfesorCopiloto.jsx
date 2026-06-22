@@ -1,201 +1,353 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../config/supabaseClient';
+import { initSchoolPdf, addPdfFooter } from '../../utils/pdfUtils';
+import autoTable from 'jspdf-autotable';
 
 export default function ProfesorCopiloto() {
   const [herramienta, setHerramienta] = useState('rubrica');
   const [tema, setTema] = useState('');
+  const [nivelObjetivo, setNivelObjetivo] = useState('1º Básico');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [resultado, setResultado] = useState(null);
 
-  const generarContenido = (e) => {
+  const nivelesEducativos = [
+    '1º Básico', '2º Básico', '3º Básico', '4º Básico', '5º Básico', '6º Básico', '7º Básico', '8º Básico',
+    '1º Medio', '2º Medio', '3º Medio', '4º Medio'
+  ];
+  const [resultado, setResultado] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [asignaturas, setAsignaturas] = useState([]);
+
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('userLogged'));
+    if (user) {
+      setUserData(user);
+      cargarAsignaturas(user.rut);
+    }
+  }, []);
+
+  const cargarAsignaturas = async (rut) => {
+    const { data } = await supabase.from('asignaturas').select('nombre').eq('rut_profesor', rut);
+    if (data) setAsignaturas([...new Set(data.map(a => a.nombre))]);
+  };
+
+  const formatMarkdown = (text) => {
+    if (!text) return '';
+    let formatted = text
+      .replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      
+      // Encabezados
+      .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold mt-6 mb-2 text-blue-800 dark:text-blue-300">$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2 class="text-xl font-extrabold mt-8 mb-3 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-black mt-8 mb-4 text-blue-600 dark:text-blue-400 border-b-2 border-blue-100 dark:border-blue-900/50 pb-3">$1</h1>')
+      
+      // Listas Numeradas (ej. 1. Texto)
+      .replace(/^\s*(\d+)\.\s+(.*)$/gim, '<div class="flex items-start gap-3 mt-6 mb-3"><span class="flex items-center justify-center bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-bold rounded-lg w-7 h-7 text-sm shrink-0">$1</span><span class="font-bold text-gray-800 dark:text-gray-200 mt-0.5">$2</span></div>')
+      
+      // Listas con Viñetas (ej. * Texto o - Texto)
+      .replace(/^\s*[\*\-]\s+(.*)$/gim, '<div class="flex items-start gap-2 mb-2 ml-4"><span class="text-blue-500 mt-1 shrink-0"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.5"></circle></svg></span><span class="flex-1 text-gray-700 dark:text-gray-300">$1</span></div>')
+      
+      // Negritas y Cursivas
+      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-extrabold text-gray-900 dark:text-white">$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em class="italic text-gray-700 dark:text-gray-300">$1</em>');
+    
+    // Manejo de saltos de línea inteligentes
+    // Evita saltos de línea dobles después de elementos de bloque que ya tienen márgenes
+    formatted = formatted
+      .replace(/<\/div>\n/g, '</div>')
+      .replace(/<\/h1>\n/g, '</h1>')
+      .replace(/<\/h2>\n/g, '</h2>')
+      .replace(/<\/h3>\n/g, '</h3>')
+      .replace(/\n/g, '<br />');
+
+    return formatted;
+  };
+
+  const exportarPDF = async () => {
+    if (!resultado) return;
+    try {
+      const doc = await initSchoolPdf(
+        "COLEGIO CONECTAEDUC", 
+        `Material Pedagógico IA: ${herramienta.toUpperCase()}`
+      );
+      
+      let yPos = doc.startY || 80;
+      
+      // Tipo de Material
+      doc.setFontSize(16);
+      doc.setTextColor(30, 64, 175); // Azul principal
+      doc.setFont("helvetica", "bold");
+      doc.text(`Material Pedagógico IA: ${herramienta.toUpperCase()}`, 14, yPos);
+      yPos += 10;
+      
+      // Tema del PDF
+      doc.setFontSize(13);
+      doc.setTextColor(80, 80, 80); // Gris oscuro
+      doc.setFont("helvetica", "bold");
+      const tituloLines = doc.splitTextToSize(`Tema: ${tema}`, 180);
+      doc.text(tituloLines, 14, yPos);
+      yPos += tituloLines.length * 6 + 6;
+      
+      const lines = resultado.split('\n');
+      let tableRows = [];
+      let tableHeaders = [];
+      let inTable = false;
+
+      const checkPageBreak = (neededSpace = 10) => {
+        if (yPos + neededSpace > 280) {
+          doc.addPage();
+          yPos = 20;
+        }
+      };
+
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+
+        // Detectar y construir tablas
+        if (line.startsWith('|') && line.endsWith('|')) {
+           const cells = line.split('|').slice(1, -1).map(c => c.trim());
+           // Ignorar la fila de guiones divisores de tabla Markdown
+           if (cells.every(c => /^[-:]+$/.test(c))) continue;
+           
+           if (!inTable) {
+              inTable = true;
+              tableHeaders = cells;
+           } else {
+              tableRows.push(cells);
+           }
+           continue;
+        }
+
+        // Si se acaba la tabla, renderizarla
+        if (inTable && !line.startsWith('|')) {
+           checkPageBreak(30);
+           autoTable(doc, {
+             head: [tableHeaders],
+             body: tableRows,
+             startY: yPos,
+             theme: 'grid',
+             styles: { fontSize: 9, cellPadding: 3, textColor: [50, 50, 50] },
+             headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold' },
+             margin: { left: 14, right: 14 }
+           });
+           yPos = doc.lastAutoTable.finalY + 10;
+           inTable = false;
+           tableHeaders = [];
+           tableRows = [];
+        }
+
+        if (!line) {
+           yPos += 3;
+           continue;
+        }
+
+        // Limpieza de negritas y cursivas para renderizado simple
+        line = line.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1');
+
+        let isHeader = false;
+        let fontSize = 10;
+        let fontStyle = "normal";
+        let textColor = [50, 50, 50];
+        let indent = 14;
+
+        // Detectar tipo de línea
+        if (line.startsWith('### ')) {
+           line = line.substring(4);
+           isHeader = true; fontSize = 11; fontStyle = "bold"; textColor = [30, 64, 175];
+        } else if (line.startsWith('## ')) {
+           line = line.substring(3);
+           isHeader = true; fontSize = 12; fontStyle = "bold"; textColor = [30, 64, 175];
+        } else if (line.startsWith('# ')) {
+           line = line.substring(2);
+           isHeader = true; fontSize = 14; fontStyle = "bold"; textColor = [30, 64, 175];
+        } else if (line.startsWith('- ') || line.startsWith('* ')) {
+           line = "• " + line.substring(2);
+           indent = 18;
+        } else if (/^\d+\.\s/.test(line)) {
+           indent = 18;
+        }
+
+        doc.setFontSize(fontSize);
+        doc.setFont("helvetica", fontStyle);
+        doc.setTextColor(...textColor);
+
+        const splitLine = doc.splitTextToSize(line, 210 - indent - 14);
+        checkPageBreak(splitLine.length * 5 + 2);
+        
+        doc.text(splitLine, indent, yPos);
+        yPos += splitLine.length * 5 + (isHeader ? 4 : 2);
+      }
+
+      // Si el texto termina justo al final de la tabla
+      if (inTable) {
+         checkPageBreak(30);
+         autoTable(doc, {
+           head: [tableHeaders],
+           body: tableRows,
+           startY: yPos,
+           theme: 'grid',
+           styles: { fontSize: 9, cellPadding: 3, textColor: [50, 50, 50] },
+           headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold' },
+           margin: { left: 14, right: 14 }
+         });
+      }
+
+      addPdfFooter(doc);
+      doc.save(`Material_${herramienta}_${tema.substring(0, 10).replace(/[^a-zA-Z0-9]/g,'_')}.pdf`);
+    } catch (error) {
+      console.error(error);
+      alert("Error al generar PDF");
+    }
+  };
+
+  const generarContenido = async (e) => {
     e.preventDefault();
     if (!tema.trim()) return;
-    
+
     setIsGenerating(true);
     setResultado(null);
 
-    // Simulamos el tiempo de "pensamiento" de la Inteligencia Artificial (2.5 segundos)
-    setTimeout(() => {
-      let respuestaSimulada = '';
+    const asignaturasTexto = asignaturas.length > 0 ? asignaturas.join(', ') : 'diversas áreas';
+
+    const promptIA = `Eres un asistente pedagógico experto. 
+    Docente: ${userData?.nombre || 'Profesor'}.
+    Especialidad: ${asignaturasTexto}.
+    Sistema: Educación Chilena.
+    Nivel Educativo: ${nivelObjetivo}.
+    
+    Tarea: Generar contenido de tipo ${herramienta} para el tema: "${tema}" destinado estrictamente a estudiantes de ${nivelObjetivo}.
+    Asegúrate de usar un lenguaje pedagógico formal y adecuado para el currículum de Chile en el nivel especificado. NUNCA uses la terminología "grados" ni "escuela", utiliza exclusivamente "${nivelObjetivo}" como nivel escolar.
+    Responde solo con el contenido solicitado.`;
+
+    try {
+      const apiKey = import.meta.env.VITE_GROQ_API_KEY;
       
-      if (herramienta === 'rubrica') {
-        respuestaSimulada = `RÚBRICA DE EVALUACIÓN: ${tema.toUpperCase()}
-        
-Criterios (Puntaje 1 al 4):
+      // DIAGNÓSTICO: Esto te mostrará en la consola si la llave existe
+      console.log("¿Existe la API Key?:", apiKey ? "Sí" : "NO ESTÁ CARGADA");
 
-1. Comprensión del Tema (4 pts):
-- Excelente (4): Demuestra un entendimiento profundo y preciso del tema.
-- Bueno (3): Entiende los conceptos principales, pero omite detalles.
-- Regular (2): Comprensión superficial o con errores conceptuales.
-- Deficiente (1): No demuestra comprensión del tema.
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant", 
+          messages: [{ role: "user", content: promptIA }]
+        })
+      });
 
-2. Argumentación y Análisis (4 pts):
-- Excelente (4): Argumentos sólidos, respaldados con evidencia clara.
-- Bueno (3): Argumentos válidos, evidencia parcial.
-- Regular (2): Afirmaciones sin suficiente respaldo.
-- Deficiente (1): Sin argumentos claros ni respaldo.
-
-3. Redacción y Ortografía (4 pts):
-- Excelente (4): Sin errores, vocabulario variado y pertinente.
-- Bueno (3): 1-3 errores menores, buen vocabulario.
-- Regular (2): 4-6 errores que dificultan la lectura parcial.
-- Deficiente (1): Múltiples errores que impiden la comprensión.`;
-      } else if (herramienta === 'actividad') {
-        respuestaSimulada = `PLANIFICACIÓN DE ACTIVIDAD: ${tema.toUpperCase()}
-        
-Estructura sugerida para bloque de 90 minutos:
-
-1. INICIO (15 minutos) - "Activación de conocimientos":
-Muestre a los estudiantes una imagen o un video corto (2 min) relacionado con el tema. Haga 3 preguntas abiertas al curso: "¿Qué observan?", "¿Qué creen que pasará?", "¿Cómo se relaciona con lo que vimos ayer?".
-
-2. DESARROLLO (55 minutos) - "Trabajo Práctico":
-Divida al curso en grupos de 4. Entregue un texto o problema a resolver. Cada grupo debe crear un mapa conceptual en papelógrafo resumiendo los 3 puntos clave del tema. El docente monitorea y guía a los grupos.
-
-3. CIERRE (20 minutos) - "Ticket de Salida":
-Un representante por grupo presenta su mapa conceptual en 2 minutos. 
-Al finalizar, entregue un "Ticket de Salida" (papel pequeño) donde cada alumno deba responder individualmente: "Escribe 1 cosa nueva que aprendiste hoy y 1 duda que te quedó".`;
-      } else {
-        respuestaSimulada = `PREGUNTAS DE EVALUACIÓN: ${tema.toUpperCase()}
-        
-Nivel Cognitivo: Aplicación y Análisis (Taxonomía de Bloom)
-
-Pregunta 1 (Alternativa):
-Analizando el contexto de ${tema}, ¿Cuál de las siguientes afirmaciones describe mejor la causa principal del fenómeno estudiado?
-A) Ocurrió de manera espontánea sin intervención externa.
-B) Fue resultado directo de las políticas implementadas en la época.
-C) Se debió exclusivamente a factores geográficos.
-D) Es una consecuencia de la falta de recursos naturales.
-(Respuesta correcta sugerida: B)
-
-Pregunta 2 (Desarrollo Breve):
-Explique en sus propias palabras cómo el concepto de ${tema} impacta en la sociedad actual. Proporcione al menos un ejemplo concreto para respaldar su respuesta.
-
-Pregunta 3 (Desarrollo Extenso):
-Compare y contraste dos posturas diferentes respecto a ${tema}. ¿Cuál postura considera usted más acertada y por qué? Justifique su respuesta utilizando al menos tres argumentos válidos vistos en clases.`;
+      const data = await response.json();
+      
+      // DIAGNÓSTICO: Esto imprimirá el error real del servidor en la consola
+      if (!response.ok) {
+        console.error("Detalle del error de Groq:", JSON.stringify(data, null, 2));
+        throw new Error(data.error?.message || JSON.stringify(data));
       }
-
-      setResultado(respuestaSimulada);
+      
+      setResultado(data.choices[0].message.content);
+    } catch (error) {
+      setResultado(`Error: ${error.message}`);
+    } finally {
       setIsGenerating(false);
-    }, 2500);
+    }
   };
 
+  // ... (El resto de tu JSX se mantiene igual)
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
-      
-      {/* CABECERA */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-black text-transparent bg-clip-text bg-linear-to-r from-purple-600 to-blue-600 flex items-center gap-2">
-          ConectaEdu IA 
-          <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold uppercase border border-purple-200">BETA</span>
-        </h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Asistente pedagógico para creación de rúbricas, actividades y pruebas en segundos.</p>
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 p-8">
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Copiloto Pedagógico IA</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Bienvenido, {userData?.nombre}. IA configurada para: {asignaturas.join(', ')}</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* PANEL DE CONTROL IA */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-6">
+        {/* PANEL DE CONTROL */}
+        <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl shadow-sm p-6">
           <form onSubmit={generarContenido} className="space-y-6">
-            
-            {/* Selector de Herramienta */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">1. ¿Qué necesitas crear hoy?</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <label className={`flex flex-col items-center p-3 text-center rounded-xl border-2 cursor-pointer transition-all ${herramienta === 'rubrica' ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                  <input type="radio" className="sr-only" checked={herramienta === 'rubrica'} onChange={() => setHerramienta('rubrica')} />
-                  <svg className={`w-6 h-6 mb-1 ${herramienta === 'rubrica' ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                  <span className={`text-xs font-bold ${herramienta === 'rubrica' ? 'text-purple-700 dark:text-purple-400' : 'text-gray-600 dark:text-gray-300'}`}>Rúbrica de Evaluación</span>
-                </label>
-                
-                <label className={`flex flex-col items-center p-3 text-center rounded-xl border-2 cursor-pointer transition-all ${herramienta === 'actividad' ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                  <input type="radio" className="sr-only" checked={herramienta === 'actividad'} onChange={() => setHerramienta('actividad')} />
-                  <svg className={`w-6 h-6 mb-1 ${herramienta === 'actividad' ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-                  <span className={`text-xs font-bold ${herramienta === 'actividad' ? 'text-purple-700 dark:text-purple-400' : 'text-gray-600 dark:text-gray-300'}`}>Actividad de Clase</span>
-                </label>
-
-                <label className={`flex flex-col items-center p-3 text-center rounded-xl border-2 cursor-pointer transition-all ${herramienta === 'preguntas' ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                  <input type="radio" className="sr-only" checked={herramienta === 'preguntas'} onChange={() => setHerramienta('preguntas')} />
-                  <svg className={`w-6 h-6 mb-1 ${herramienta === 'preguntas' ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  <span className={`text-xs font-bold ${herramienta === 'preguntas' ? 'text-purple-700 dark:text-purple-400' : 'text-gray-600 dark:text-gray-300'}`}>Preguntas para Prueba</span>
-                </label>
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">1. ¿Qué necesitas crear?</label>
+              <div className="grid grid-cols-3 gap-3">
+                {['rubrica', 'actividad', 'preguntas'].map((h) => (
+                  <label key={h} className={`p-3 text-center rounded-xl border-2 cursor-pointer transition-all bg-white dark:bg-gray-900 ${herramienta === h ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-300 dark:hover:border-blue-500'}`}>
+                    <input type="radio" className="sr-only" checked={herramienta === h} onChange={() => setHerramienta(h)} />
+                    <span className="text-xs font-bold capitalize">{h}</span>
+                  </label>
+                ))}
               </div>
             </div>
 
-            {/* Prompt del usuario */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">2. Especifique el Tema o Aprendizaje Esperado</label>
-              <textarea 
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">2. Nivel Educativo Objetivo</label>
+              <select
+                value={nivelObjetivo}
+                onChange={(e) => setNivelObjetivo(e.target.value)}
+                className="w-full rounded-xl border p-3.5 text-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-gray-100 mb-2"
+              >
+                {nivelesEducativos.map(nivel => (
+                  <option key={nivel} value={nivel}>{nivel}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">3. Tema o Aprendizaje Esperado</label>
+              <textarea
                 required
                 value={tema}
                 onChange={(e) => setTema(e.target.value)}
-                placeholder="Ej: Un ensayo argumentativo sobre el impacto de las redes sociales en adolescentes..."
+                placeholder="Ej: Análisis del texto argumentativo..."
                 rows="4"
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 p-4 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 focus:outline-none text-gray-800 dark:text-white transition-all"
+                className="w-full rounded-xl border p-4 text-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-gray-100"
               ></textarea>
             </div>
 
-            {/* Botón Generar */}
-            <button 
+            <button
               type="submit"
-              disabled={isGenerating || !tema.trim()}
-              className={`w-full py-3.5 rounded-xl font-bold text-white shadow-lg transition-all flex justify-center items-center gap-2 ${
-                isGenerating || !tema.trim() 
-                ? 'bg-gray-300 text-gray-500 shadow-none cursor-not-allowed' 
-                : 'bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-purple-500/25'
-              }`}
+              disabled={isGenerating}
+              className="w-full py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-600/30 transition-all"
             >
-              {isGenerating ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                  Generando con IA...
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                  Generar Material
-                </>
-              )}
+              {isGenerating ? 'Consultando a la IA...' : 'Generar Contenido'}
             </button>
           </form>
         </div>
 
-        {/* PANTALLA DE RESULTADOS */}
-        <div className="bg-gray-900 rounded-2xl shadow-xl border border-gray-800 p-6 flex flex-col h-125 lg:h-auto overflow-hidden relative">
-          
-          <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-800">
-            <h3 className="text-white font-bold flex items-center gap-2">
-              <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              Resultado Generado
-            </h3>
-            {resultado && (
-              <button 
-                onClick={() => alert('¡Texto copiado al portapapeles!')}
-                className="text-xs font-bold text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition-colors border border-gray-700 flex items-center gap-1"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                Copiar
-              </button>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-            {isGenerating ? (
-              <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4 animate-pulse">
-                <svg className="w-12 h-12 text-purple-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
-                <p className="text-sm font-medium">Analizando pedagogía e indexando currículum nacional...</p>
+        {/* RESULTADO */}
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl text-gray-800 dark:text-gray-200 overflow-hidden h-[500px] shadow-sm flex flex-col relative">
+          {isGenerating ? (
+            <div className="h-full flex flex-col items-center justify-center space-y-4 p-6">
+               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+               <p className="text-gray-500 dark:text-gray-400">Generando material pedagógico de alta calidad...</p>
+            </div>
+          ) : resultado ? (
+            <>
+              <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
+                <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100">Resultado de la IA</h3>
+                <button 
+                  onClick={exportarPDF}
+                  className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors shadow-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                  Guardar PDF
+                </button>
               </div>
-            ) : resultado ? (
-              <div className="text-gray-300 text-sm whitespace-pre-wrap font-mono leading-relaxed animate-fade-in-up">
-                {resultado}
+              <div className="p-6 overflow-y-auto flex-1">
+                <div 
+                  className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 pb-10" 
+                  dangerouslySetInnerHTML={{ __html: formatMarkdown(resultado) }} 
+                />
               </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-gray-500 space-y-3">
-                <svg className="w-10 h-10 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                <p className="text-sm">Escribe un tema y haz clic en Generar para ver la magia.</p>
+            </>
+          ) : (
+            <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500 p-6">
+              <div className="text-center">
+                <svg className="w-12 h-12 mx-auto mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                <p>El resultado aparecerá aquí.</p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
-
       </div>
     </div>
   );

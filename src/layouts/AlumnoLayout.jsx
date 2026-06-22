@@ -88,7 +88,7 @@ export default function AlumnoLayout() {
         {/* Header del Sidebar */}
         <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
           {!isCollapsed && (
-            <div className="flex items-center space-x-2 overflow-hidden">
+            <div className="flex items-center space-x-2 overflow-hidden cursor-pointer" onClick={() => { navigate('/panel/alumno'); setIsMobileMenuOpen(false); }}>
               <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
             </div>
           )}
@@ -248,7 +248,7 @@ export default function AlumnoLayout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
         <header className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between z-30 transition-colors duration-300">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 cursor-pointer" onClick={() => { navigate('/panel/alumno'); setIsMobileMenuOpen(false); }}>
             <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
           </div>
           <button onClick={() => setIsMobileMenuOpen(true)} className="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white focus:outline-none">

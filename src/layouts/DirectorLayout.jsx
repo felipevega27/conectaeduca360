@@ -125,7 +125,7 @@ export default function DirectorLayout() {
         {/* Sidebar Header */}
         <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
           {!isCollapsed && (
-            <div className="flex items-center space-x-2 overflow-hidden">
+            <div className="flex items-center space-x-2 overflow-hidden cursor-pointer" onClick={() => { navigate('/panel/director'); setIsMobileMenuOpen(false); }}>
               <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
             </div>
           )}
@@ -455,7 +455,7 @@ export default function DirectorLayout() {
         
         {/* Header móvil */}
         <header className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between z-30 transition-colors duration-300">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 cursor-pointer" onClick={() => { navigate('/panel/director'); setIsMobileMenuOpen(false); }}>
             <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
           </div>
           <button 

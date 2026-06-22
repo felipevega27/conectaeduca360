@@ -66,7 +66,7 @@ export default function ApoderadoLayout() {
         
         <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
           {!isCollapsed && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 cursor-pointer" onClick={() => { navigate('/panel/apoderado'); setIsMobileMenuOpen(false); }}>
               <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shrink-0">CE</div>
               <span className="text-lg font-bold text-gray-800 dark:text-white truncate">Portal Apoderado</span>
             </div>
@@ -145,7 +145,7 @@ export default function ApoderadoLayout() {
 
       <div className="flex-1 flex flex-col min-w-0 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
         <header className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 cursor-pointer" onClick={() => { navigate('/panel/apoderado'); setIsMobileMenuOpen(false); }}>
             <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm">CE</div>
             <span className="text-lg font-semibold text-gray-800 dark:text-white">Portal Apoderado</span>
           </div>

@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import logo from '../assets/logo.png';
+import headerBg from '../assets/imagen_documentos.png';
 
 /**
  * Inicializa un documento PDF con el encabezado institucional estándar de ConectaEduc.
@@ -10,47 +11,66 @@ import logo from '../assets/logo.png';
  */
 export const initSchoolPdf = async (tituloCabecera, subtituloCabecera, config = {}) => {
   const doc = new jsPDF();
+  let headerHeight = 35;
 
-  // Fondo del header
-  doc.setFillColor(1, 6, 148); // blue-900
-  doc.rect(0, 0, 210, 32, 'F');
-
-  const logoUrl = config?.logo_url || logo;
-
+  // Cargar y dibujar la imagen de fondo del header
   try {
-    const img = new Image();
-    img.src = logoUrl;
+    const bgImg = new Image();
+    bgImg.src = headerBg;
     await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
+      bgImg.onload = resolve;
+      bgImg.onerror = reject;
     });
+    
+    // Calcular aspect ratio para evitar deformaciones
+    const aspectRatio = bgImg.naturalHeight / bgImg.naturalWidth;
+    headerHeight = 210 * aspectRatio;
+    
+    doc.addImage(bgImg, 'PNG', 0, 0, 210, headerHeight);
+    
+    // Nota: Como la imagen ya tiene todo el branding, no superponemos textos
+    // para evitar que se vea manchado o empalmado.
+    
+  } catch (err) {
+    console.warn("No se pudo cargar la imagen de fondo para el PDF", err);
+    doc.setFillColor(1, 6, 148); // Fallback blue-900
+    doc.rect(0, 0, 210, 32, 'F');
+    headerHeight = 32;
 
-    if (img.complete && img.naturalWidth > 0) {
-      doc.addImage(img, 'PNG', 14, 4, 24, 24);
+    const logoUrl = config?.logo_url || logo;
+    try {
+      const img = new Image();
+      img.src = logoUrl;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      if (img.complete && img.naturalWidth > 0) {
+        doc.addImage(img, 'PNG', 14, 4, 24, 24);
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(20);
+        doc.setFont("helvetica", "bold");
+        doc.text(config?.nombre_colegio || tituloCabecera, 42, 17);
+        
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text(subtituloCabecera || "", 42, 24);
+      }
+    } catch (fallbackErr) {
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(20);
       doc.setFont("helvetica", "bold");
-      doc.text(config?.nombre_colegio || tituloCabecera, 42, 17);
+      doc.text(config?.nombre_colegio || tituloCabecera, 14, 17);
       
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text(subtituloCabecera || "", 42, 24);
-    } else {
-      throw new Error("Imagen cargada pero sin dimensiones válidas");
+      doc.text(subtituloCabecera || "", 14, 24);
     }
-  } catch (err) {
-    console.warn("No se pudo cargar el logo para el PDF", err);
-    // Fallback sin logo
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    doc.text(config?.nombre_colegio || tituloCabecera, 14, 17);
-    
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(subtituloCabecera || "", 14, 24);
   }
 
+  // Ajustar el inicio para que quede justo debajo de la imagen sin solaparse con ella
+  doc.startY = headerHeight + 2;
   return doc;
 };
 
