@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
-import { useReactToPrint } from 'react-to-print';
+import html2pdf from 'html2pdf.js';
 import CertificadoAlumnoRegular from '../../components/documentos/CertificadoAlumnoRegular';
 import CertificadoMatricula from '../../components/documentos/CertificadoMatricula';
 import InformeNotas from '../../components/documentos/InformeNotas';
@@ -135,20 +135,24 @@ export default function DirectorDocumentos() {
     }
   };
 
-  const handlePrintRegular = useReactToPrint({
-    contentRef: refRegular,
-    documentTitle: `Certificado_Regular_${selectedAlumno?.rut || ''}`,
-  });
+  const downloadPDF = (ref, fileName) => {
+    const element = ref.current;
+    if (!element) return;
+    
+    const opt = {
+      margin:       0.5,
+      filename:     `${fileName}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true, windowWidth: 800 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    
+    html2pdf().set(opt).from(element).save();
+  };
 
-  const handlePrintMatricula = useReactToPrint({
-    contentRef: refMatricula,
-    documentTitle: `Certificado_Matricula_${selectedAlumno?.rut || ''}`,
-  });
-
-  const handlePrintNotas = useReactToPrint({
-    contentRef: refNotas,
-    documentTitle: `Informe_Notas_${selectedAlumno?.rut || ''}`,
-  });
+  const handlePrintRegular = () => downloadPDF(refRegular, `Certificado_Regular_${selectedAlumno?.rut || ''}`);
+  const handlePrintMatricula = () => downloadPDF(refMatricula, `Certificado_Matricula_${selectedAlumno?.rut || ''}`);
+  const handlePrintNotas = () => downloadPDF(refNotas, `Informe_Notas_${selectedAlumno?.rut || ''}`);
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
@@ -311,15 +315,15 @@ export default function DirectorDocumentos() {
       {/* COMPONENTES OCULTOS PARA IMPRESIÓN (Off-screen) */}
       <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', overflow: 'hidden' }}>
         {/* Vista Previa Oculta */}
-        <div className="hidden">
+        <div>
           <CertificadoAlumnoRegular ref={refRegular} alumno={selectedAlumno} fechaEmision={fechaHoy} correlativo={correlativoRandom} config={config} />
         </div>
         {/* Vista Previa Oculta */}
-        <div className="hidden">
+        <div>
           <CertificadoMatricula ref={refMatricula} alumno={selectedAlumno} fechaEmision={fechaHoy} correlativo={correlativoRandom + 1} config={config} />
         </div>
         {/* Vista Previa Oculta */}
-        <div className="hidden">
+        <div>
           <InformeNotas ref={refNotas} alumno={selectedAlumno} notas={notasAlumno} fechaEmision={fechaHoy} correlativo={correlativoRandom + 2} config={config} />
         </div>
       </div>
