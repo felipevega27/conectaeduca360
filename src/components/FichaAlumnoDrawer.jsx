@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 import UserAvatar from './UserAvatar';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import toast from 'react-hot-toast';
 
 export default function FichaAlumnoDrawer({ isOpen, onClose, rutAlumno }) {
   const navigate = useNavigate();
@@ -19,6 +24,15 @@ export default function FichaAlumnoDrawer({ isOpen, onClose, rutAlumno }) {
   const [casosConvivencia, setCasosConvivencia] = useState([]);
   const [registroPie, setRegistroPie] = useState(null);
   const [sesionesPie, setSesionesPie] = useState([]);
+
+  // --- NUEVOS ESTADOS PARA CONVIVENCIA (INGRESO Y EXPORTACIÓN) ---
+  const [nuevaAnotacion, setNuevaAnotacion] = useState({
+    tipo_falta: 'Anotación Positiva',
+    gravedad: 'Formativa',
+    descripcion: ''
+  });
+  const [isSavingAnotacion, setIsSavingAnotacion] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !rutAlumno) return;
@@ -102,6 +116,124 @@ export default function FichaAlumnoDrawer({ isOpen, onClose, rutAlumno }) {
   const handleVerPerfilCompleto = () => {
     onClose();
     navigate(`/panel/director/alumnos/${rutAlumno}`);
+  };
+
+  // --- FUNCIONES NUEVAS: GUARDAR Y EXPORTAR ---
+  const handleGuardarAnotacion = async (e) => {
+    e.preventDefault();
+    if (!nuevaAnotacion.descripcion.trim()) {
+      toast.error('La descripción no puede estar vacía.');
+      return;
+    }
+    setIsSavingAnotacion(true);
+    try {
+      const { data, error } = await supabase.from('casos_convivencia').insert([{
+        rut_alumno: rutAlumno,
+        tipo_falta: nuevaAnotacion.tipo_falta,
+        gravedad: nuevaAnotacion.gravedad,
+        descripcion: nuevaAnotacion.descripcion,
+        estado_protocolo: nuevaAnotacion.gravedad === 'Formativa' ? 'Cerrado' : 'Activo' // Las formativas se cierran automáticamente
+      }]).select();
+
+      if (error) throw error;
+
+      toast.success('Anotación guardada exitosamente.');
+      setCasosConvivencia([data[0], ...casosConvivencia]);
+      setNuevaAnotacion({ tipo_falta: 'Anotación Positiva', gravedad: 'Formativa', descripcion: '' });
+    } catch (error) {
+      console.error('Error al guardar anotación:', error);
+      toast.error('Ocurrió un error al guardar la anotación.');
+    } finally {
+      setIsSavingAnotacion(false);
+    }
+  };
+
+  const handleExportarPDF = () => {
+    setIsExporting(true);
+    try {
+      const doc = new jsPDF();
+      const fechaHoy = new Date().toLocaleDateString('es-CL');
+      
+      doc.setFontSize(18);
+      doc.text('Hoja de Vida y Convivencia', 14, 22);
+      
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.text(`Alumno: ${infoAlumno?.nombre || 'N/A'}`, 14, 30);
+      doc.text(`RUT: ${infoAlumno?.rut || 'N/A'}`, 14, 36);
+      doc.text(`Curso: ${matricula?.cursos?.nombre || 'Sin Matricular'}`, 14, 42);
+      doc.text(`Fecha Emisión: ${fechaHoy}`, 14, 48);
+
+      const tableColumn = ["Fecha", "Tipo", "Gravedad", "Estado", "Descripción"];
+      const tableRows = [];
+
+      casosConvivencia.forEach(caso => {
+        const casoData = [
+          new Date(caso.fecha_reporte).toLocaleDateString('es-CL'),
+          caso.tipo_falta,
+          caso.gravedad,
+          caso.estado_protocolo,
+          caso.descripcion
+        ];
+        tableRows.push(casoData);
+      });
+
+      doc.autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: 55,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [15, 23, 42] }
+      });
+
+      doc.save(`Hoja_Vida_${infoAlumno?.rut}_${fechaHoy.replace(/\//g, '-')}.pdf`);
+      toast.success('PDF exportado correctamente');
+    } catch (error) {
+      console.error("Error al generar PDF", error);
+      toast.error('Error al generar PDF');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportarExcel = async () => {
+    setIsExporting(true);
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Hoja de Vida');
+      
+      worksheet.columns = [
+        { header: 'Fecha', key: 'fecha', width: 15 },
+        { header: 'Tipo de Falta', key: 'tipo', width: 25 },
+        { header: 'Gravedad', key: 'gravedad', width: 15 },
+        { header: 'Estado', key: 'estado', width: 15 },
+        { header: 'Descripción', key: 'descripcion', width: 60 }
+      ];
+
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+
+      casosConvivencia.forEach(caso => {
+        worksheet.addRow({
+          fecha: new Date(caso.fecha_reporte).toLocaleDateString('es-CL'),
+          tipo: caso.tipo_falta,
+          gravedad: caso.gravedad,
+          estado: caso.estado_protocolo,
+          descripcion: caso.descripcion
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const fechaHoy = new Date().toLocaleDateString('es-CL').replace(/\//g, '-');
+      saveAs(blob, `Hoja_Vida_${infoAlumno?.rut}_${fechaHoy}.xlsx`);
+      toast.success('Excel exportado correctamente');
+    } catch (error) {
+      console.error("Error al generar Excel", error);
+      toast.error('Error al generar Excel');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // --- PERMISOS ---
@@ -235,31 +367,103 @@ export default function FichaAlumnoDrawer({ isOpen, onClose, rutAlumno }) {
                 !tieneAccesoConvivencia ? (
                   <RenderBloqueo mensaje="El historial de convivencia y actas RICE requiere credenciales de Docente, Inspectoría o Equipo Directivo." />
                 ) : (
-                  <div className="space-y-4">
-                    {casosConvivencia.length > 0 ? (
-                      casosConvivencia.map(caso => (
-                        <div key={caso.id} className={`p-4 rounded-xl border ${caso.estado_protocolo === 'Cerrado' ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 opacity-80' : 'border-red-100 dark:border-red-900/30 bg-white dark:bg-gray-800 shadow-sm'}`}>
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <h4 className="font-bold text-gray-800 dark:text-gray-200 text-sm">{caso.tipo_falta}</h4>
-                              <p className="text-[10px] text-gray-400 mt-0.5">Reportado el: {new Date(caso.fecha_reporte).toLocaleDateString('es-CL')}</p>
-                            </div>
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${caso.estado_protocolo === 'Cerrado' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                              {caso.estado_protocolo}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100/50 dark:bg-gray-900 p-3 rounded-lg whitespace-pre-wrap mt-3">{caso.descripcion}</p>
+                  <div className="space-y-6">
+                    {/* INGRESO RÁPIDO */}
+                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                      <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                        <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        Ingreso Rápido de Anotación
+                      </h3>
+                      <form onSubmit={handleGuardarAnotacion} className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <select 
+                            value={nuevaAnotacion.tipo_falta} 
+                            onChange={(e) => setNuevaAnotacion({...nuevaAnotacion, tipo_falta: e.target.value})}
+                            className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="Anotación Positiva">Anotación Positiva</option>
+                            <option value="Anotación Negativa">Anotación Negativa</option>
+                            <option value="Observación General">Observación General</option>
+                            <option value="Acoso Escolar / Bullying">Acoso Escolar / Bullying</option>
+                            <option value="Falta de Respeto">Falta de Respeto</option>
+                          </select>
+                          <select 
+                            value={nuevaAnotacion.gravedad} 
+                            onChange={(e) => setNuevaAnotacion({...nuevaAnotacion, gravedad: e.target.value})}
+                            className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="Formativa">Formativa (Cierre Automático)</option>
+                            <option value="Leve">Falta Leve</option>
+                            <option value="Media">Falta Media</option>
+                            <option value="Alta">Falta Grave</option>
+                          </select>
                         </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-10 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
-                        <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center mb-2">
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                        <textarea 
+                          required
+                          value={nuevaAnotacion.descripcion}
+                          onChange={(e) => setNuevaAnotacion({...nuevaAnotacion, descripcion: e.target.value})}
+                          rows="2"
+                          placeholder="Describa el hecho, actitud o incidente..."
+                          className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <div className="flex justify-end">
+                          <button 
+                            type="submit" 
+                            disabled={isSavingAnotacion}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-md transition-colors disabled:opacity-50"
+                          >
+                            {isSavingAnotacion ? 'Guardando...' : 'Guardar en Hoja de Vida'}
+                          </button>
                         </div>
-                        <p className="text-sm font-bold text-emerald-800 dark:text-emerald-400">Historial Limpio</p>
-                        <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">El estudiante no registra faltas ni protocolos.</p>
+                      </form>
+                    </div>
+
+                    {/* HISTORIAL Y EXPORTACIÓN */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Historial Reciente</h3>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={handleExportarPDF} 
+                            disabled={isExporting || casosConvivencia.length === 0}
+                            className="px-3 py-1.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-md transition-colors disabled:opacity-50 flex items-center gap-1"
+                          >
+                            PDF
+                          </button>
+                          <button 
+                            onClick={handleExportarExcel} 
+                            disabled={isExporting || casosConvivencia.length === 0}
+                            className="px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 border border-green-100 rounded-md transition-colors disabled:opacity-50 flex items-center gap-1"
+                          >
+                            Excel
+                          </button>
+                        </div>
                       </div>
-                    )}
+
+                      <div className="space-y-4 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                        {casosConvivencia.length > 0 ? (
+                          casosConvivencia.map(caso => (
+                            <div key={caso.id} className={`p-4 rounded-xl border ${caso.gravedad === 'Formativa' ? 'border-blue-100 bg-blue-50/30' : caso.estado_protocolo === 'Cerrado' ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 opacity-80' : 'border-red-100 dark:border-red-900/30 bg-white dark:bg-gray-800 shadow-sm'}`}>
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <h4 className={`font-bold text-sm ${caso.gravedad === 'Formativa' ? 'text-blue-700' : 'text-gray-800 dark:text-gray-200'}`}>{caso.tipo_falta}</h4>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">Fecha: {new Date(caso.fecha_reporte).toLocaleDateString('es-CL')}</p>
+                                </div>
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${caso.gravedad === 'Formativa' ? 'bg-blue-100 text-blue-700' : caso.estado_protocolo === 'Cerrado' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                  {caso.gravedad === 'Formativa' ? 'Anotación' : caso.estado_protocolo}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-100 dark:border-gray-800 whitespace-pre-wrap mt-3 shadow-sm">{caso.descripcion}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 bg-gray-50 dark:bg-gray-900/10 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+                            <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Hoja de Vida en Blanco</p>
+                            <p className="text-xs text-gray-400 mt-1">El estudiante no registra anotaciones en el sistema.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )
               )}

@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export default function ProfesorAnotaciones() {
   const [user, setUser] = useState(null);
@@ -32,7 +36,7 @@ export default function ProfesorAnotaciones() {
       // 1. Obtener cursos donde hace clases
       const { data: asignaturas } = await supabase
         .from('asignaturas')
-        .select('id_curso')
+        .select('id_curso, cursos(nombre)')
         .eq('rut_profesor', rutProfesor);
 
       if (!asignaturas || asignaturas.length === 0) return;
@@ -146,6 +150,86 @@ export default function ProfesorAnotaciones() {
     }
   };
 
+  const handleExportarPDF = () => {
+    try {
+      const doc = new jsPDF();
+      const fechaHoy = new Date().toLocaleDateString('es-CL');
+      
+      doc.setFontSize(18);
+      doc.text('Mis Anotaciones Registradas', 14, 22);
+      
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.text(`Profesor: ${user?.nombre || 'N/A'}`, 14, 30);
+      doc.text(`Fecha Emisión: ${fechaHoy}`, 14, 36);
+
+      const tableColumn = ["Fecha", "Alumno", "Tipo", "Gravedad", "Descripción"];
+      const tableRows = [];
+
+      historial.forEach(item => {
+        const rowData = [
+          formatDate(item.fecha),
+          item.perfiles?.nombre || 'Desconocido',
+          item.tipo,
+          item.gravedad || 'N/A',
+          item.descripcion
+        ];
+        tableRows.push(rowData);
+      });
+
+      doc.autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: 45,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [15, 23, 42] }
+      });
+
+      doc.save(`Anotaciones_Profesor_${fechaHoy.replace(/\//g, '-')}.pdf`);
+      toast.success('PDF exportado correctamente');
+    } catch (error) {
+      console.error("Error al generar PDF", error);
+      toast.error('Error al generar PDF');
+    }
+  };
+
+  const handleExportarExcel = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Mis Anotaciones');
+      
+      worksheet.columns = [
+        { header: 'Fecha', key: 'fecha', width: 15 },
+        { header: 'Alumno', key: 'alumno', width: 25 },
+        { header: 'Tipo de Falta', key: 'tipo', width: 20 },
+        { header: 'Gravedad', key: 'gravedad', width: 15 },
+        { header: 'Descripción', key: 'descripcion', width: 60 }
+      ];
+
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+
+      historial.forEach(item => {
+        worksheet.addRow({
+          fecha: formatDate(item.fecha),
+          alumno: item.perfiles?.nombre || 'Desconocido',
+          tipo: item.tipo,
+          gravedad: item.gravedad || 'N/A',
+          descripcion: item.descripcion
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const fechaHoy = new Date().toLocaleDateString('es-CL').replace(/\//g, '-');
+      saveAs(blob, `Anotaciones_Profesor_${fechaHoy}.xlsx`);
+      toast.success('Excel exportado correctamente');
+    } catch (error) {
+      console.error("Error al generar Excel", error);
+      toast.error('Error al generar Excel');
+    }
+  };
+
   // Formatear fecha
   const formatDate = (dateString) => {
     const d = new Date(dateString);
@@ -161,6 +245,32 @@ export default function ProfesorAnotaciones() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Hoja de Vida y Convivencia</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Ingreso rápido de anotaciones al libro digital.</p>
+        </div>
+        
+        {/* BOTONES EXPORTAR EN CABECERA ESTÁNDAR */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button 
+            onClick={handleExportarPDF} 
+            disabled={historial.length === 0}
+            className="flex items-center gap-2.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Descargar historial en PDF"
+          >
+            <svg className="w-5 h-5 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            Exportar PDF
+          </button>
+          <button 
+            onClick={handleExportarExcel} 
+            disabled={historial.length === 0}
+            className="flex items-center gap-2.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Descargar historial en Excel"
+          >
+            <svg className="w-5 h-5 text-green-600 dark:text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Exportar Excel
+          </button>
         </div>
       </div>
 
