@@ -11,7 +11,8 @@ export default function ProfesorCalificaciones() {
   const [selectedAsignaturaId, setSelectedAsignaturaId] = useState('');
   const [cursoActual, setCursoActual] = useState(null);
 
-  // Alumnos y Notas
+  // Evaluaciones y Alumnos
+  const [evaluaciones, setEvaluaciones] = useState([]); // <-- AHORA ES DINÁMICO
   const [alumnos, setAlumnos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -20,8 +21,16 @@ export default function ProfesorCalificaciones() {
   const [isFichaDrawerOpen, setIsFichaDrawerOpen] = useState(false);
   const [rutFichaSeleccionada, setRutFichaSeleccionada] = useState(null);
 
-  // Nombres de las evaluaciones
-  const evaluaciones = ['Nota 1', 'Nota 2', 'Nota 3', 'Nota 4'];
+  // Estados Modal Nueva Evaluación
+  const [isModalEvalOpen, setIsModalEvalOpen] = useState(false);
+  const [nombreNuevaEval, setNombreNuevaEval] = useState('');
+  const [descripcionNuevaEval, setDescripcionNuevaEval] = useState('');
+  const [porcentajeNuevaEval, setPorcentajeNuevaEval] = useState('');
+  const [isCreatingEval, setIsCreatingEval] = useState(false);
+
+  // Estados Modal Administrar Evaluaciones
+  const [isModalAdminOpen, setIsModalAdminOpen] = useState(false);
+  const [isDeletingEval, setIsDeletingEval] = useState(false);
 
   useEffect(() => {
     const loggedUserJSON = localStorage.getItem('userLogged');
@@ -40,13 +49,9 @@ export default function ProfesorCalificaciones() {
         .eq('rut_profesor', rutProfesor);
 
       if (data && data.length > 0) {
-        // Filtrar duplicados por si existen en la base de datos
         const asignaturasUnicas = data.filter((asig, index, self) =>
-          index === self.findIndex((t) => (
-            t.nombre === asig.nombre && t.id_curso === asig.id_curso
-          ))
+          index === self.findIndex((t) => (t.nombre === asig.nombre && t.id_curso === asig.id_curso))
         );
-        
         setMisAsignaturas(asignaturasUnicas);
         setSelectedAsignaturaId(asignaturasUnicas[0].id.toString());
       }
@@ -60,6 +65,7 @@ export default function ProfesorCalificaciones() {
       cargarAlumnosYNotas(selectedAsignaturaId);
     } else {
       setAlumnos([]);
+      setEvaluaciones([]);
     }
   }, [selectedAsignaturaId]);
 
@@ -75,6 +81,17 @@ export default function ProfesorCalificaciones() {
         semestre: 'Primer Semestre'
       });
 
+      // 1. Cargar las evaluaciones dinámicas (las columnas)
+      const { data: evaluacionesData } = await supabase
+        .from('evaluaciones')
+        .select('*')
+        .eq('id_asignatura', asigId)
+        .order('created_at', { ascending: true });
+
+      const evaluacionesActivas = evaluacionesData || [];
+      setEvaluaciones(evaluacionesActivas);
+
+      // 2. Cargar Matrículas
       const { data: matriculas } = await supabase
         .from('matriculas')
         .select('rut_alumno, condicion_estudiante')
@@ -86,31 +103,28 @@ export default function ProfesorCalificaciones() {
         return;
       }
 
+      // 3. Cargar Perfiles de alumnos
       const ruts = matriculas.map(m => m.rut_alumno);
       const { data: perfiles } = await supabase.from('perfiles').select('rut, nombre').in('rut', ruts);
 
+      // 4. Cargar Notas y cruzarlas con id_evaluacion
       const { data: notas } = await supabase
         .from('notas')
-        .select('id, rut_alumno, nota')
-        .eq('id_asignatura', asignatura.id)
-        .order('id', { ascending: true });
-
-      const notasMap = {};
-      notas?.forEach(n => {
-        if (!notasMap[n.rut_alumno]) notasMap[n.rut_alumno] = [];
-        notasMap[n.rut_alumno].push(n);
-      });
+        .select('id, rut_alumno, id_evaluacion, nota')
+        .eq('id_asignatura', asignatura.id);
 
       const alumnosList = matriculas.map(m => {
         const perfil = perfiles?.find(p => p.rut === m.rut_alumno);
-        const notasAlumno = notasMap[m.rut_alumno] || [];
         const pie = m.condicion_estudiante?.toUpperCase() === 'PIE';
 
-        const notasUI = Array(4).fill(null).map((_, i) => {
-          if (i < notasAlumno.length) {
-            return { id_bd: notasAlumno[i].id, valor: notasAlumno[i].nota.toString() };
-          }
-          return { id_bd: null, valor: '' };
+        // Mapear las notas EXACTAMENTE a las evaluaciones que existen
+        const notasUI = evaluacionesActivas.map(evaluacion => {
+          const notaExistente = notas?.find(n => n.rut_alumno === m.rut_alumno && n.id_evaluacion === evaluacion.id);
+          return {
+            id_bd: notaExistente?.id || null,
+            id_evaluacion: evaluacion.id,
+            valor: notaExistente ? notaExistente.nota.toString() : ''
+          };
         });
 
         return {
@@ -133,11 +147,106 @@ export default function ProfesorCalificaciones() {
     }
   };
 
-  const calcularPromedio = (notasUIArray) => {
-    const notasValidas = notasUIArray.map(n => parseFloat(n.valor)).filter(n => !isNaN(n));
-    if (notasValidas.length === 0) return '-';
-    const suma = notasValidas.reduce((a, b) => a + b, 0);
-    return (suma / notasValidas.length).toFixed(1);
+  // --- CREAR NUEVA EVALUACIÓN (COLUMNA) ---
+  const handleCrearEvaluacion = async (e) => {
+    e.preventDefault();
+    if (!nombreNuevaEval.trim()) return;
+
+    setIsCreatingEval(true);
+    const toastId = toast.loading('Creando columna de evaluación...');
+
+    try {
+      const porcentaje = porcentajeNuevaEval ? parseInt(porcentajeNuevaEval) : null;
+      if (porcentaje !== null && (porcentaje <= 0 || porcentaje > 100)) {
+        toast.error('El porcentaje debe estar entre 1 y 100.', { id: toastId });
+        setIsCreatingEval(false);
+        return;
+      }
+
+      const { error } = await supabase.from('evaluaciones').insert([{
+        id_asignatura: parseInt(selectedAsignaturaId),
+        nombre: nombreNuevaEval.trim(),
+        descripcion: descripcionNuevaEval.trim() || null,
+        porcentaje: porcentaje
+      }]);
+
+      if (error) throw error;
+
+      toast.success('Evaluación creada', { id: toastId });
+      setNombreNuevaEval('');
+      setDescripcionNuevaEval('');
+      setPorcentajeNuevaEval('');
+      setIsModalEvalOpen(false);
+
+      // Recargar para que aparezca la nueva columna a todos los alumnos
+      cargarAlumnosYNotas(selectedAsignaturaId);
+
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al crear evaluación', { id: toastId });
+    } finally {
+      setIsCreatingEval(false);
+    }
+  };
+
+  // --- ELIMINAR EVALUACIÓN ---
+  const handleEliminarEvaluacion = async (idEval) => {
+    if (!window.confirm("¿Estás seguro de eliminar esta evaluación? Se borrarán todas las notas asociadas.")) return;
+    setIsDeletingEval(true);
+    const toastId = toast.loading('Eliminando evaluación...');
+
+    try {
+      // Eliminar las notas asociadas primero para evitar errores de llave foránea
+      await supabase.from('notas').delete().eq('id_evaluacion', idEval);
+      
+      const { error } = await supabase.from('evaluaciones').delete().eq('id', idEval);
+      if (error) throw error;
+
+      toast.success('Evaluación y sus notas eliminadas', { id: toastId });
+      
+      // Si ya no quedan evaluaciones, cerramos el modal
+      if (evaluaciones.length <= 1) {
+        setIsModalAdminOpen(false);
+      }
+      
+      cargarAlumnosYNotas(selectedAsignaturaId);
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al eliminar', { id: toastId });
+    } finally {
+      setIsDeletingEval(false);
+    }
+  };
+
+  const calcularPromedio = (notasUIArray, evaluacionesActuales) => {
+    let sumaPonderada = 0;
+    let sumaPorcentajes = 0;
+    let sumaSimple = 0;
+    let notasValidasCount = 0;
+    let tienePorcentajes = false;
+
+    notasUIArray.forEach((nota, index) => {
+      const valor = parseFloat(nota.valor);
+      if (!isNaN(valor)) {
+        const evaluacion = evaluacionesActuales[index];
+        if (evaluacion && evaluacion.porcentaje) {
+          tienePorcentajes = true;
+          sumaPonderada += valor * (evaluacion.porcentaje / 100);
+          sumaPorcentajes += evaluacion.porcentaje;
+        }
+        sumaSimple += valor;
+        notasValidasCount++;
+      }
+    });
+
+    if (notasValidasCount === 0) return '-';
+
+    if (tienePorcentajes && sumaPorcentajes > 0) {
+      // Si la suma de porcentajes no llega al 100% todavía, promediamos en base a los porcentajes rendidos
+      return (sumaPonderada / (sumaPorcentajes / 100)).toFixed(1);
+    }
+
+    return (sumaSimple / notasValidasCount).toFixed(1);
   };
 
   const handleNotaChange = (alumnoRut, indexNota, valorIngresado) => {
@@ -177,7 +286,6 @@ export default function ProfesorCalificaciones() {
     }));
   };
 
-  // --- NAVEGACIÓN TIPO EXCEL (Flechas y Enter) ---
   const handleKeyDown = (e, rowIndex, colIndex) => {
     if (e.key === 'ArrowDown' || e.key === 'Enter') {
       e.preventDefault();
@@ -216,6 +324,7 @@ export default function ProfesorCalificaciones() {
             inserts.push({
               rut_alumno: alumno.rut,
               id_asignatura: parseInt(selectedAsignaturaId),
+              id_evaluacion: notaCelda.id_evaluacion, // <-- DATO CLAVE AÑADIDO
               nota: parseFloat(notaCelda.valor),
               tipo_evaluacion: 'Nota Parcial'
             });
@@ -238,7 +347,7 @@ export default function ProfesorCalificaciones() {
     }
   };
 
-  const alumnosConPromedio = alumnos.map(a => ({ ...a, promedio: calcularPromedio(a.notasUI) })).filter(a => a.promedio !== '-');
+  const alumnosConPromedio = alumnos.map(a => ({ ...a, promedio: calcularPromedio(a.notasUI, evaluaciones) })).filter(a => a.promedio !== '-');
   const reprobados = alumnosConPromedio.filter(a => parseFloat(a.promedio) < 4.0).length;
   const porcentajeReprobacion = alumnosConPromedio.length > 0 ? Math.round((reprobados / alumnosConPromedio.length) * 100) : 0;
 
@@ -272,12 +381,25 @@ export default function ProfesorCalificaciones() {
         </div>
 
         <div className="flex gap-3">
-          <button className="flex items-center gap-2.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm">
-            <svg className="w-5 h-5 text-green-600 dark:text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Exportar Excel
+          {evaluaciones.length > 0 && (
+            <button
+              onClick={() => setIsModalAdminOpen(true)}
+              className="flex items-center gap-2.5 px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors shadow-sm"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              Administrar
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsModalEvalOpen(true)}
+            disabled={!selectedAsignaturaId}
+            className="flex items-center gap-2.5 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800/50 rounded-xl text-sm font-bold text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors shadow-sm disabled:opacity-50"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+            Añadir Evaluación
           </button>
+
           <button
             disabled={isSaving || alumnos.length === 0}
             onClick={handleGuardarCambios}
@@ -293,22 +415,8 @@ export default function ProfesorCalificaciones() {
         </div>
       </div>
 
-      {/* ALERTA INTELIGENTE */}
-      {porcentajeReprobacion >= 30 && (
-        <div className="mb-6 p-4 rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 flex items-start gap-3 animate-fade-in-up">
-          <div className="bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 p-2 rounded-lg shrink-0 mt-0.5">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          </div>
-          <div>
-            <h4 className="font-bold text-red-800 dark:text-red-300 text-sm">Alerta de Rendimiento (Mineduc)</h4>
-            <p className="text-xs text-red-600/80 dark:text-red-400/80 mt-0.5">El <span className="font-bold text-red-700 dark:text-red-300">{porcentajeReprobacion}%</span> del curso presenta promedio rojo. Según normativa interna, esto generará una alerta a UTP.</p>
-          </div>
-        </div>
-      )}
-
-      {/* PLANILLA DE NOTAS (Estilo Excel) */}
+      {/* PLANILLA DE NOTAS */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
-
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -316,11 +424,29 @@ export default function ProfesorCalificaciones() {
                 <th className="p-4 font-bold min-w-50 sticky left-0 bg-gray-50 dark:bg-gray-800 z-10 border-r border-gray-200 dark:border-gray-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)]">
                   Estudiante ({alumnos.length})
                 </th>
-                {evaluaciones.map((evaluacion, i) => (
-                  <th key={i} className="p-4 font-semibold text-center min-w-25 border-r border-gray-100 dark:border-gray-700">
-                    {evaluacion}
-                  </th>
-                ))}
+
+                {evaluaciones.length === 0 ? (
+                  <th className="p-4 font-medium text-center text-gray-400 italic">No hay evaluaciones. Haz clic en "Añadir Evaluación".</th>
+                ) : (
+                  evaluaciones.map((evaluacion, i) => (
+                    <th key={i} className="p-4 font-semibold text-center min-w-32 border-r border-gray-100 dark:border-gray-700" title={evaluacion.descripcion || evaluacion.nombre}>
+                      <div className="flex flex-col items-center justify-center">
+                        <span className="truncate block max-w-[120px] mx-auto text-sm">{evaluacion.nombre}</span>
+                        {evaluacion.porcentaje && (
+                          <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 mt-1 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full ring-1 ring-blue-200 dark:ring-blue-800">
+                            {evaluacion.porcentaje}%
+                          </span>
+                        )}
+                        {evaluacion.descripcion && (
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400 font-normal mt-1 w-full truncate max-w-[120px] mx-auto">
+                            {evaluacion.descripcion}
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  ))
+                )}
+
                 <th className="p-4 font-black text-center min-w-25 bg-gray-100/50 dark:bg-gray-700 border-l border-gray-200 dark:border-gray-700">
                   Promedio
                 </th>
@@ -333,7 +459,7 @@ export default function ProfesorCalificaciones() {
                   <td colSpan={evaluaciones.length + 2} className="p-10">
                     <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 space-y-3">
                       <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                      <span className="text-sm font-medium">Cargando nómina oficial...</span>
+                      <span className="text-sm font-medium">Cargando nómina y columnas...</span>
                     </div>
                   </td>
                 </tr>
@@ -344,22 +470,19 @@ export default function ProfesorCalificaciones() {
                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
                     </div>
                     <h3 className="text-gray-900 dark:text-white font-bold text-base mb-1">Sin Estudiantes</h3>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">Seleccione otra asignatura o contacte a UTP para actualizar la matrícula.</p>
                   </td>
                 </tr>
               ) : alumnos.map((alumno, rowIndex) => {
-                const promedioStr = calcularPromedio(alumno.notasUI);
+                const promedioStr = calcularPromedio(alumno.notasUI, evaluaciones);
                 const promedioNum = parseFloat(promedioStr);
                 const esRojoFinal = promedioNum < 4.0;
 
                 return (
                   <tr key={alumno.rut} className="hover:bg-blue-50/30 dark:hover:bg-gray-700/50 transition-colors group">
-                    {/* COLUMNA FIJA: ESTUDIANTE */}
                     <td className="p-0 sticky left-0 bg-white dark:bg-gray-800 z-10 border-r border-gray-200 dark:border-gray-700 group-hover:bg-blue-50/80 dark:group-hover:bg-gray-700/80 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)] transition-colors">
                       <div
                         onClick={() => { setRutFichaSeleccionada(alumno.rut); setIsFichaDrawerOpen(true); }}
                         className="px-4 py-3 flex items-center gap-3 cursor-pointer group/ficha"
-                        title="Ver Ficha del Alumno"
                       >
                         <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center font-bold text-gray-500 dark:text-gray-400 text-[10px] group-hover/ficha:bg-blue-100 dark:group-hover/ficha:bg-blue-900/60 group-hover/ficha:text-blue-600 dark:group-hover/ficha:text-blue-300 transition-colors shrink-0">
                           {alumno.nombre.substring(0, 2).toUpperCase()}
@@ -374,56 +497,51 @@ export default function ProfesorCalificaciones() {
                       </div>
                     </td>
 
-                    {/* COLUMNAS DE NOTAS (INPUTS) */}
-                    {alumno.notasUI.map((notaObj, colIndex) => {
-                      const valorString = notaObj.valor;
-                      const notaNum = parseFloat(valorString);
-                      const esRojo = valorString !== '' && notaNum < 4.0;
-                      const isSaved = !!notaObj.id_bd;
+                    {/* COLUMNAS DINÁMICAS DE NOTAS */}
+                    {evaluaciones.length === 0 ? (
+                      <td className="p-2 border-r border-gray-100 dark:border-gray-700 text-center bg-gray-50/30 dark:bg-gray-800/20"></td>
+                    ) : (
+                      alumno.notasUI.map((notaObj, colIndex) => {
+                        const valorString = notaObj.valor;
+                        const notaNum = parseFloat(valorString);
+                        const esRojo = valorString !== '' && notaNum < 4.0;
+                        const isSaved = !!notaObj.id_bd;
 
-                      return (
-                        <td key={colIndex} className="p-2 border-r border-gray-100 dark:border-gray-700 text-center relative bg-white dark:bg-gray-800/50 group-hover:bg-transparent">
-                          <div className="relative inline-block">
-                            <input
-                              id={`nota-${rowIndex}-${colIndex}`}
-                              type="text"
-                              maxLength="3"
-                              value={valorString}
-                              onChange={(e) => handleNotaChange(alumno.rut, colIndex, e.target.value)}
-                              onBlur={(e) => handleNotaBlur(alumno.rut, colIndex, e.target.value)}
-                              onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
-                              placeholder="-"
-                              disabled={isSaved}
-                              title={isSaved ? "Nota guardada. No se puede modificar." : "Ingresar nota"}
-                              className={`w-14 h-10 text-center font-bold text-sm rounded-lg border focus:outline-none transition-all ${
-                                isSaved
-                                  ? (esRojo 
-                                      ? 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30 text-red-500/80 dark:text-red-400/60 cursor-not-allowed'
-                                      : 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30 text-blue-600/80 dark:text-blue-400/60 cursor-not-allowed')
+                        return (
+                          <td key={colIndex} className="p-2 border-r border-gray-100 dark:border-gray-700 text-center relative bg-white dark:bg-gray-800/50 group-hover:bg-transparent">
+                            <div className="relative inline-block">
+                              <input
+                                id={`nota-${rowIndex}-${colIndex}`}
+                                type="text"
+                                maxLength="3"
+                                value={valorString}
+                                onChange={(e) => handleNotaChange(alumno.rut, colIndex, e.target.value)}
+                                onBlur={(e) => handleNotaBlur(alumno.rut, colIndex, e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
+                                placeholder="-"
+                                className={`w-14 h-10 text-center font-bold text-sm rounded-lg border focus:outline-none transition-all ${isSaved
+                                  ? (esRojo
+                                    ? 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30 text-red-500/80 dark:text-red-400/60'
+                                    : 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30 text-blue-600/80 dark:text-blue-400/60')
                                   : (valorString === ''
-                                      ? 'bg-transparent border-transparent text-gray-400 dark:text-gray-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 hover:border-gray-200 dark:hover:border-gray-600'
-                                      : esRojo
-                                        ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
-                                        : 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20')
-                              }`}
-                            />
-                            {isSaved && (
-                              <div className="absolute -top-1 -right-1 bg-gray-100 dark:bg-gray-700 rounded-full p-0.5 border border-white dark:border-gray-800 shadow-sm" title="Nota guardada">
-                                <svg className="w-2.5 h-2.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
+                                    ? 'bg-transparent border-transparent text-gray-400 dark:text-gray-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 hover:border-gray-200 dark:hover:border-gray-600'
+                                    : esRojo
+                                      ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
+                                      : 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20')
+                                  }`}
+                              />
+                            </div>
+                          </td>
+                        );
+                      })
+                    )}
 
-                    {/* COLUMNA FINAL: PROMEDIO */}
                     <td className="p-0 text-center bg-gray-50/50 dark:bg-gray-800/80 border-l border-gray-200 dark:border-gray-700">
                       <div className={`px-4 py-3 font-black text-lg ${promedioStr === '-'
-                          ? 'text-gray-300 dark:text-gray-600'
-                          : esRojoFinal
-                            ? 'text-red-600 dark:text-red-400'
-                            : 'text-blue-600 dark:text-blue-400'
+                        ? 'text-gray-300 dark:text-gray-600'
+                        : esRojoFinal
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-blue-600 dark:text-blue-400'
                         }`}>
                         {promedioStr}
                       </div>
@@ -435,6 +553,122 @@ export default function ProfesorCalificaciones() {
           </table>
         </div>
       </div>
+
+      {/* MODAL CREAR EVALUACIÓN */}
+      {isModalEvalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-200 dark:border-gray-700 animate-fade-in-up">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Añadir Evaluación</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Ingresa los detalles de la evaluación para añadirla al libro de clases.</p>
+
+            <form onSubmit={handleCrearEvaluacion}>
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nombre Corto *</label>
+                  <input
+                    type="text"
+                    autoFocus
+                    required
+                    maxLength={40}
+                    placeholder="Ej: Prueba Sumativa 1"
+                    value={nombreNuevaEval}
+                    onChange={(e) => setNombreNuevaEval(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Descripción / Significado</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    placeholder="Ej: Prueba sobre lectura complementaria"
+                    value={descripcionNuevaEval}
+                    onChange={(e) => setDescripcionNuevaEval(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Porcentaje de Ponderación (%)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    placeholder="Ej: 25"
+                    value={porcentajeNuevaEval}
+                    onChange={(e) => setPorcentajeNuevaEval(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalEvalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium text-sm transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingEval || !nombreNuevaEval.trim()}
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors shadow-md shadow-blue-600/20 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isCreatingEval ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : null}
+                  Crear Columna
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ADMINISTRAR EVALUACIONES */}
+      {isModalAdminOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700 animate-fade-in-up flex flex-col max-h-[80vh]">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Administrar Evaluaciones</h3>
+              <button onClick={() => setIsModalAdminOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Aquí puedes eliminar columnas creadas por error. Las notas guardadas en ellas también se borrarán.</p>
+            
+            <div className="overflow-y-auto custom-scrollbar pr-2 flex-1 space-y-3 mb-6">
+              {evaluaciones.map(ev => (
+                <div key={ev.id} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-gray-800 dark:text-white text-sm">{ev.nombre}</span>
+                    <span className="text-xs text-gray-500">{ev.porcentaje ? `${ev.porcentaje}% - ` : ''}{ev.descripcion || 'Sin descripción'}</span>
+                  </div>
+                  <button 
+                    onClick={() => handleEliminarEvaluacion(ev.id)}
+                    disabled={isDeletingEval}
+                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+                    title="Eliminar Evaluación"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+              ))}
+              {evaluaciones.length === 0 && (
+                <p className="text-center text-sm text-gray-500">No hay evaluaciones.</p>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setIsModalAdminOpen(false)}
+                className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium text-sm transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DRAWER DE FICHA DE ALUMNO */}
       <FichaAlumnoDrawer

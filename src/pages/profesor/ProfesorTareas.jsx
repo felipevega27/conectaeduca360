@@ -6,12 +6,14 @@ import { useNavigate } from 'react-router-dom';
 export default function ProfesorTareas() {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
-  
+
   const [cursoFiltro, setCursoFiltro] = useState('Todos');
 
   // Estados para Modal Detalles
   const [isDetallesOpen, setIsDetallesOpen] = useState(false);
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null);
+  const [alumnosTarea, setAlumnosTarea] = useState([]); // Reemplaza a mockAlumnos
+  const [isLoadingDetalles, setIsLoadingDetalles] = useState(false);
 
   // Datos desde Supabase
   const [asignaturasProfesor, setAsignaturasProfesor] = useState([]);
@@ -37,7 +39,7 @@ export default function ProfesorTareas() {
         .from('asignaturas')
         .select('id, nombre, id_curso, cursos(nombre)')
         .eq('rut_profesor', rutProfesor);
-      
+
       if (data) setAsignaturasProfesor(data);
     } catch (error) {
       console.error('Error cargando asignaturas:', error);
@@ -47,21 +49,31 @@ export default function ProfesorTareas() {
   const cargarTareas = async (rutProfesor) => {
     setIsLoading(true);
     try {
-      const { data } = await supabase
+      // 🚀 Consulta anidada: Trae la tarea, el nombre del curso, los matriculados (para el total) y las entregas
+      const { data, error } = await supabase
         .from('tareas')
-        .select('id, titulo, descripcion, fecha_entrega, estado, cursos(nombre), asignaturas(nombre)')
+        .select(`
+          id, titulo, descripcion, fecha_entrega, estado, id_curso,
+          cursos(nombre, matriculas(rut_alumno)),
+          asignaturas(nombre),
+          entregas_tareas(id)
+        `)
         .eq('rut_profesor', rutProfesor)
         .order('created_at', { ascending: false });
+
+      if (error) throw error;
 
       if (data) {
         const tareasMapeadas = data.map(t => ({
           id: t.id,
           titulo: t.titulo,
+          id_curso: t.id_curso,
           curso: t.cursos?.nombre || 'Sin curso',
           asignatura: t.asignaturas?.nombre || 'Sin asignatura',
           fechaEntrega: t.fecha_entrega,
-          entregas: Math.floor(Math.random() * 20) + 10, // Mock datos
-          total: 35, // Mock datos
+          // Calculamos el progreso real contando los arreglos
+          entregas: t.entregas_tareas ? t.entregas_tareas.length : 0,
+          total: t.cursos?.matriculas ? t.cursos.matriculas.length : 0,
           estado: t.estado,
           descripcion: t.descripcion
         }));
@@ -69,17 +81,69 @@ export default function ProfesorTareas() {
       }
     } catch (error) {
       console.error('Error cargando tareas:', error);
+      toast.error('Error al cargar las tareas');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const tareasFiltradas = cursoFiltro === 'Todos' ? tareas : tareas.filter(t => t.curso === cursoFiltro);
-
-  const abrirDetalles = (tarea) => {
+  // --- NUEVA FUNCIÓN: CARGAR DETALLES REALES AL ABRIR EL MODAL ---
+  const abrirDetalles = async (tarea) => {
     setTareaSeleccionada(tarea);
     setIsDetallesOpen(true);
+    setIsLoadingDetalles(true);
+
+    try {
+      // 1. Obtener todos los alumnos matriculados en el curso de esta tarea
+      const { data: matriculasData } = await supabase
+        .from('matriculas')
+        .select('rut_alumno, perfiles(nombre)')
+        .eq('id_curso', tarea.id_curso);
+
+      // 2. Obtener todas las entregas que se han hecho para esta tarea específica
+      const { data: entregasData } = await supabase
+        .from('entregas_tareas')
+        .select('*')
+        .eq('id_tarea', tarea.id);
+
+      const hoy = new Date();
+      const fechaLimite = new Date(tarea.fechaEntrega + 'T23:59:59');
+
+      // 3. Cruzar los datos: Ver quién entregó y quién falta
+      const listaFormateada = (matriculasData || []).map(m => {
+        const entrega = (entregasData || []).find(e => e.rut_alumno === m.rut_alumno);
+        let estadoStr = 'Pendiente';
+
+        if (entrega) {
+          estadoStr = 'Entregado';
+        } else if (hoy > fechaLimite) {
+          estadoStr = 'Atrasado'; // Si no hay entrega y ya pasó la fecha
+        }
+
+        return {
+          id: m.rut_alumno,
+          nombre: m.perfiles?.nombre || 'Alumno Desconocido',
+          estado: estadoStr,
+          nota: entrega?.nota || null,
+          fecha: entrega ? new Date(entrega.fecha_entrega).toLocaleString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : null,
+          comentario: entrega?.comentario || null,
+          archivo_url: entrega?.archivo_url || null
+        };
+      });
+
+      // Ordenar lista alfabéticamente
+      listaFormateada.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      setAlumnosTarea(listaFormateada);
+
+    } catch (error) {
+      console.error('Error cargando detalles:', error);
+      toast.error('No se pudieron cargar los detalles de los alumnos.');
+    } finally {
+      setIsLoadingDetalles(false);
+    }
   };
+
+  const tareasFiltradas = cursoFiltro === 'Todos' ? tareas : tareas.filter(t => t.curso === cursoFiltro);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -87,26 +151,17 @@ export default function ProfesorTareas() {
     return d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  // Mock data para detalles de alumnos
-  const mockAlumnos = [
-    { id: 1, nombre: 'Ana García', estado: 'Entregado', nota: 6.8, fecha: 'Hoy, 10:30' },
-    { id: 2, nombre: 'Bastián López', estado: 'Entregado', nota: null, fecha: 'Ayer, 18:15' },
-    { id: 3, nombre: 'Camila Soto', estado: 'Atrasado', nota: null, fecha: null },
-    { id: 4, nombre: 'Diego Torres', estado: 'Pendiente', nota: null, fecha: null },
-    { id: 5, nombre: 'Elena Vega', estado: 'Entregado', nota: 7.0, fecha: 'Hace 2 días' }
-  ];
-
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
       <Toaster position="top-right" toastOptions={{ className: 'dark:bg-gray-800 dark:text-white dark:border dark:border-gray-700' }} />
-      
+
       {/* CABECERA */}
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Gestión de Tareas</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Administre las asignaciones, adjunte recursos y revise el progreso de sus estudiantes.</p>
         </div>
-        <button 
+        <button
           onClick={() => navigate('/panel/profesor/tareas/nueva')}
           className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-bold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-600/30 transform hover:-translate-y-0.5"
         >
@@ -117,20 +172,19 @@ export default function ProfesorTareas() {
 
       {/* FILTROS Y CONTENIDO */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden">
-        
+
         {/* Barra de Filtros */}
         <div className="p-4 border-b border-gray-100 dark:border-gray-700/50 flex flex-col sm:flex-row items-center gap-4 overflow-x-auto">
           <span className="text-sm font-bold text-gray-500 dark:text-gray-400 shrink-0">Filtrar por curso:</span>
           <div className="flex flex-wrap gap-2">
             {misCursos.map(curso => (
-              <button 
+              <button
                 key={curso}
                 onClick={() => setCursoFiltro(curso)}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
-                  cursoFiltro === curso 
-                  ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 ring-2 ring-blue-500 dark:ring-blue-400' 
-                  : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${cursoFiltro === curso
+                    ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 ring-2 ring-blue-500 dark:ring-blue-400'
+                    : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
               >
                 {curso}
               </button>
@@ -150,25 +204,24 @@ export default function ProfesorTareas() {
                 <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               </div>
               <h3 className="text-lg font-bold text-gray-700 dark:text-gray-300">No hay tareas</h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">No se encontraron tareas para el filtro seleccionado.</p>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Aún no has creado tareas o no hay resultados para el filtro actual.</p>
             </div>
           ) : tareasFiltradas.map(tarea => {
-            const porcentaje = Math.round((tarea.entregas / tarea.total) * 100) || 0;
+            const porcentaje = tarea.total > 0 ? Math.round((tarea.entregas / tarea.total) * 100) : 0;
             return (
               <div key={tarea.id} className="group relative border border-gray-200 dark:border-gray-700 rounded-2xl p-6 hover:shadow-xl hover:shadow-blue-500/5 dark:hover:shadow-blue-500/10 transition-all duration-300 bg-white dark:bg-gray-800 flex flex-col h-full transform hover:-translate-y-1 overflow-hidden">
-                
+
                 {/* Barra decorativa superior */}
                 <div className={`absolute top-0 left-0 w-full h-1.5 ${tarea.estado === 'Activa' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
 
                 <div className="flex justify-between items-start mb-4 mt-1">
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${
-                    tarea.estado === 'Activa' ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/50' :
-                    tarea.estado === 'Cerrada' ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600' :
-                    'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800/50'
-                  }`}>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${tarea.estado === 'Activa' ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/50' :
+                      tarea.estado === 'Cerrada' ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600' :
+                        'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800/50'
+                    }`}>
                     {tarea.estado}
                   </span>
-                  
+
                   {/* Progress Indicator Mini */}
                   <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400" title={`${tarea.entregas} de ${tarea.total} entregas`}>
                     <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -188,7 +241,7 @@ export default function ProfesorTareas() {
                     Vence: <span className="font-bold">{formatDate(tarea.fechaEntrega)}</span>
                   </div>
 
-                  <button 
+                  <button
                     onClick={() => abrirDetalles(tarea)}
                     className="w-full py-2.5 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-400 text-sm font-bold rounded-xl transition-colors border border-blue-200 dark:border-blue-800/50 flex justify-center items-center gap-2"
                   >
@@ -204,10 +257,10 @@ export default function ProfesorTareas() {
 
       {/* MODAL DETALLES DE TAREA */}
       {isDetallesOpen && tareaSeleccionada && (
-        <div className="fixed inset-0 z-60 flex justify-end">
+        <div className="fixed inset-0 z-[60] flex justify-end">
           <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm transition-opacity" onClick={() => setIsDetallesOpen(false)}></div>
-          
-          <div className="relative z-70 w-full max-w-md bg-white dark:bg-gray-800 h-full shadow-2xl flex flex-col animate-fade-in-left border-l border-gray-200 dark:border-gray-700 overflow-hidden">
+
+          <div className="relative z-[70] w-full max-w-md bg-white dark:bg-gray-800 h-full shadow-2xl flex flex-col animate-[fadeInRight_0.3s_ease-out] border-l border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
               <h2 className="text-lg font-extrabold text-gray-800 dark:text-white">Detalles de Tarea</h2>
               <button onClick={() => setIsDetallesOpen(false)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors">
@@ -215,7 +268,7 @@ export default function ProfesorTareas() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
               <div>
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">{tareaSeleccionada.titulo}</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{tareaSeleccionada.curso} • {tareaSeleccionada.asignatura}</p>
@@ -226,10 +279,12 @@ export default function ProfesorTareas() {
                 <div className="relative w-16 h-16 flex items-center justify-center shrink-0">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
                     <path className="text-blue-200 dark:text-blue-900/50" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                    <path className="text-blue-600 dark:text-blue-400" strokeDasharray={`${Math.round((tareaSeleccionada.entregas / tareaSeleccionada.total) * 100)}, 100`} strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <path className="text-blue-600 dark:text-blue-400" strokeDasharray={`${tareaSeleccionada.total > 0 ? Math.round((tareaSeleccionada.entregas / tareaSeleccionada.total) * 100) : 0}, 100`} strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                   </svg>
                   <div className="absolute flex flex-col items-center">
-                    <span className="text-sm font-bold text-blue-700 dark:text-blue-300">{Math.round((tareaSeleccionada.entregas / tareaSeleccionada.total) * 100)}%</span>
+                    <span className="text-sm font-bold text-blue-700 dark:text-blue-300">
+                      {tareaSeleccionada.total > 0 ? Math.round((tareaSeleccionada.entregas / tareaSeleccionada.total) * 100) : 0}%
+                    </span>
                   </div>
                 </div>
                 <div>
@@ -238,41 +293,51 @@ export default function ProfesorTareas() {
                 </div>
               </div>
 
-              {/* Lista de Alumnos Simulada */}
+              {/* Lista de Alumnos Real */}
               <div>
                 <h4 className="text-sm font-bold text-gray-800 dark:text-white mb-3 uppercase tracking-wider">Estado de Alumnos</h4>
-                <div className="space-y-3">
-                  {mockAlumnos.map(al => (
-                    <div key={al.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-sm transition-shadow">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase">
-                          {al.nombre.charAt(0)}
+
+                {isLoadingDetalles ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {alumnosTarea.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-4">No hay alumnos matriculados en este curso.</p>
+                    ) : (
+                      alumnosTarea.map(al => (
+                        <div key={al.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-sm transition-shadow">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase shrink-0">
+                              {al.nombre.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-tight">{al.nombre}</p>
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{al.fecha || 'Sin entrega registrada'}</p>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${al.estado === 'Entregado' ? 'text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400' :
+                                al.estado === 'Atrasado' ? 'text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400' :
+                                  'text-orange-600 bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400'
+                              }`}>
+                              {al.estado}
+                            </span>
+                            {al.nota && <p className="text-sm font-bold text-blue-600 dark:text-blue-400 mt-1">Nota: {al.nota}</p>}
+                            {!al.nota && al.estado === 'Entregado' && <button className="text-[11px] font-bold text-blue-600 hover:underline mt-1 block w-full text-right">Calificar</button>}
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{al.nombre}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{al.fecha || 'Sin entrega'}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                          al.estado === 'Entregado' ? 'text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400' :
-                          al.estado === 'Atrasado' ? 'text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400' :
-                          'text-orange-600 bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400'
-                        }`}>
-                          {al.estado}
-                        </span>
-                        {al.nota && <p className="text-sm font-bold text-blue-600 dark:text-blue-400 mt-1">Nota: {al.nota}</p>}
-                        {!al.nota && al.estado === 'Entregado' && <button className="text-xs font-bold text-blue-600 hover:underline mt-1">Calificar</button>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-            
+
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-              <button className="w-full py-2.5 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
-                Descargar Reporte Completo
+              <button disabled={alumnosTarea.length === 0} className="w-full py-2.5 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                Descargar Reporte Excel
               </button>
             </div>
           </div>

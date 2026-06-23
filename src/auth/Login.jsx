@@ -147,7 +147,7 @@ export default function Login() {
   const fillTestData = (role) => {
     if (role === 'director') { setRut('20.003.705-7'); setPassword('123123'); }
     if (role === 'profesor') { setRut('27.223.152-4'); setPassword('123123'); }
-    if (role === 'alumno') { setRut('27.223.152-1'); setPassword('1234'); }
+    if (role === 'alumno') { setRut('12.312.312-3'); setPassword('123123'); }
     if (role === 'apoderado') { setRut('27.223.152-3'); setPassword('1234'); }
     setError(null);
   };
