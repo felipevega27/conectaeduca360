@@ -24,7 +24,7 @@ import ProfesorAsistencia from './pages/profesor/ProfesorAsistencia';
 import ProfesorAnotaciones from './pages/profesor/ProfesorAnotaciones';
 import ProfesorCalificaciones from './pages/profesor/ProfesorCalificaciones';
 import ProfesorTareas from './pages/profesor/ProfesorTareas';
-import ProfesorCrearTarea from './pages/profesor/ProfesorCrearTarea';
+import ProfesorTareasNueva from './pages/profesor/ProfesorTareasNueva';
 import ProfesorCopiloto from './pages/profesor/ProfesorCopiloto';
 import ProfesorPlanificaciones from './pages/profesor/ProfesorPlanificaciones';
 import AlumnoDashboard from './pages/alumno/AlumnoDashboard';
@@ -119,7 +119,7 @@ function App() {
             <Route path="/panel/profesor/calificaciones" element={<ProfesorCalificaciones />} />
             {/* NUEVA RUTA AQUÍ */}
             <Route path="/panel/profesor/tareas" element={<ProfesorTareas />} />
-            <Route path="/panel/profesor/tareas/nueva" element={<ProfesorCrearTarea />} />
+            <Route path="/panel/profesor/tareas/nueva" element={<ProfesorTareasNueva />} />
             {/* NUEVA RUTA DEL COPILOTO IA AQUÍ */}
             <Route path="/panel/profesor/copiloto" element={<ProfesorCopiloto />} />
             {/* NUEVA RUTA AQUÍ */}
