@@ -278,18 +278,41 @@ export default function ProfesorCalificaciones() {
                     const esRojo = notaObj.valor && parseFloat(notaObj.valor) < 4.0;
                     return (
                       <td key={colIndex} className="p-2 border-r text-center">
-                        <input
-                          type="text" maxLength="3" value={notaObj.valor} placeholder="- -"
-                          disabled={!!notaObj.id_bd}
-                          onChange={(e) => handleNotaChange(alumno.rut, colIndex, e.target.value)}
-                          onBlur={(e) => handleNotaBlur(alumno.rut, colIndex, e.target.value)}
-                          className={`w-12 h-9 text-center font-black text-sm rounded border focus:outline-none ${notaObj.id_bd ? 'cursor-not-allowed opacity-80' : ''} ${notaObj.valor ? (esRojo ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-indigo-600') : 'bg-transparent text-gray-400'}`}
-                        />
+                        <div className="relative inline-block w-12 h-9">
+                          <input
+                            type="text" maxLength="3" value={notaObj.valor} placeholder="- -"
+                            disabled={!!notaObj.id_bd}
+                            onChange={(e) => handleNotaChange(alumno.rut, colIndex, e.target.value)}
+                            onBlur={(e) => handleNotaBlur(alumno.rut, colIndex, e.target.value)}
+                            className={`w-full h-full text-center font-black text-sm rounded border focus:outline-none ${notaObj.id_bd ? 'cursor-not-allowed opacity-80 bg-gray-100 dark:bg-gray-700/50' : ''} ${notaObj.valor ? (esRojo ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-indigo-600') : 'bg-transparent text-gray-400'}`}
+                          />
+                          {!!notaObj.id_bd && (
+                            <div
+                              className="absolute inset-0 z-10 cursor-not-allowed"
+                              onClick={() => toast('Esta nota ya ha sido cerrada', { icon: '🔒' })}
+                            >
+                              <div className="absolute top-1 right-1 opacity-70 text-gray-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </td>
                     );
                   })}
-                  <td className={`p-4 text-center font-black text-lg ${promedioStr === '-' ? 'text-gray-300' : parseFloat(promedioStr) < 4.0 ? 'text-red-600' : 'text-indigo-600'}`}>
-                    {promedioStr}
+                  <td className="p-4 text-center align-middle">
+                    <div className="group relative inline-flex items-center justify-center cursor-help">
+                      <span className={`font-black text-lg ${promedioStr === '-' ? 'text-gray-300' : parseFloat(promedioStr) < 4.0 ? 'text-red-600' : 'text-indigo-600'}`}>
+                        {promedioStr}
+                      </span>
+                      <div className="absolute bottom-full right-0 mb-2 w-48 rounded-xl bg-white dark:bg-gray-800 p-3 shadow-[0_10px_30px_rgba(0,0,0,0.15)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] text-left pointer-events-none border border-gray-200 dark:border-gray-700">
+                        <strong className="block text-indigo-600 dark:text-indigo-400 mb-1 text-[11px] uppercase tracking-wider">Promedio Semestral</strong>
+                        <p className="text-gray-600 dark:text-gray-300 font-normal text-[11px] leading-relaxed">promedio final de alumno</p>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               );
