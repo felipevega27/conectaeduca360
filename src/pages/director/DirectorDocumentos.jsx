@@ -7,6 +7,7 @@ import CertificadoMatricula from '../../components/documentos/CertificadoMatricu
 import InformeNotas from '../../components/documentos/InformeNotas';
 import UserAvatar from '../../components/UserAvatar';
 import toast, { Toaster } from 'react-hot-toast';
+import BackdropLoader from '../../components/BackdropLoader';
 
 export default function DirectorDocumentos() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -160,7 +161,8 @@ export default function DirectorDocumentos() {
   const handlePrintNotas = () => downloadPDF(refNotas, `Informe_Notas_${selectedAlumno?.rut || ''}`);
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 relative">
+      {isFetchingNotas && <BackdropLoader mensaje="Cargando datos del estudiante..." />}
       <Toaster position="top-right" toastOptions={{ className: 'dark:!bg-gray-800 dark:!text-white dark:border dark:!border-gray-700' }} />
       
       {/* HEADER */}

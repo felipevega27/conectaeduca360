@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import BackdropLoader from '../../components/BackdropLoader';
+import { SkeletonCard, SkeletonBase } from '../../components/SkeletonLoader';
 
 export default function ProfesorPlanificaciones() {
   const [user, setUser] = useState(null);
@@ -270,7 +272,11 @@ export default function ProfesorPlanificaciones() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+        <div className="grid grid-cols-1 gap-6">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
       ) : planificaciones.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-12 text-center text-gray-500">
           No hay planificaciones registradas en esta asignatura.
@@ -362,6 +368,13 @@ export default function ProfesorPlanificaciones() {
           <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
 
           <div className="relative z-50 w-full max-w-2xl bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 animate-fade-in-up">
+            {isGeneratingIA && (
+              <BackdropLoader mensaje="Redactando planificación con IA..." />
+            )}
+            {isSaving && (
+              <BackdropLoader mensaje="Guardando en portafolio..." />
+            )}
+            
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
               <h2 className="text-lg font-black text-gray-800 dark:text-white flex items-center gap-2">
                 <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>

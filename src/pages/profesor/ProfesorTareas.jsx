@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import BackdropLoader from '../../components/BackdropLoader';
+import { SkeletonCard } from '../../components/SkeletonLoader';
 
 export default function ProfesorTareas() {
   const [user, setUser] = useState(null);
@@ -251,7 +253,14 @@ export default function ProfesorTareas() {
 
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {isLoading ? (
-            <div className="col-span-full py-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+            <>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </>
           ) : tareasFiltradas.length === 0 ? (
             <div className="col-span-full py-16 text-center">No hay tareas creadas.</div>
           ) : (
@@ -313,11 +322,11 @@ export default function ProfesorTareas() {
               </div>
             </div>
 
-            {isLoadingDetalles ? (
-              <div className="flex-1 flex justify-center items-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
-            ) : (
-              <div className="flex-1 flex overflow-hidden">
-
+            {/* Modal Body Container con relative para el BackdropLoader */}
+            <div className="flex-1 flex overflow-hidden relative">
+              {isLoadingDetalles && (
+                <BackdropLoader mensaje="Cargando entregas..." />
+              )}
                 {/* PANEL IZQUIERDO (35%): Lista de Alumnos */}
                 <div className="w-[35%] border-r border-gray-200 dark:border-gray-700 overflow-y-auto bg-gray-50/50 dark:bg-gray-900/20 divide-y divide-gray-100 dark:divide-gray-700 custom-scrollbar">
                   {alumnosTarea.map(al => {
@@ -422,9 +431,7 @@ export default function ProfesorTareas() {
                   )}
                 </div>
 
-              </div>
-            )}
-
+            </div>
           </div>
         </div>
       )}

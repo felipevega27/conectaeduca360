@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import BackdropLoader from '../../components/BackdropLoader';
 
 export default function ApoderadoAsistencia() {
   const [pupiloActivo] = useState({ nombre: 'Martina Fernández', curso: '2do Medio B' });
@@ -129,7 +130,8 @@ export default function ApoderadoAsistencia() {
       {/* MODAL JUSTIFICACIÓN */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm px-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 animate-fade-in-up">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 animate-fade-in-up relative overflow-hidden">
+            {isUploading && <BackdropLoader mensaje="Enviando justificativo..." />}
             <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Enviar Justificativo</h2>
             <p className="text-xs text-gray-500 mb-6">El documento será revisado por Inspectoría General.</p>
             
@@ -153,7 +155,7 @@ export default function ApoderadoAsistencia() {
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-50 transition-colors">Cancelar</button>
                 <button type="submit" disabled={isUploading} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors flex justify-center items-center">
-                  {isUploading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Enviar a Inspectoría'}
+                  Enviar a Inspectoría
                 </button>
               </div>
             </form>

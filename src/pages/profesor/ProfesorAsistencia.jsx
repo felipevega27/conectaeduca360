@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
-import FichaAlumnoDrawer from '../../components/FichaAlumnoDrawer'; // <-- NUEVA IMPORTACIÓN
+import FichaAlumnoDrawer from '../../components/FichaAlumnoDrawer';
+import { SkeletonCard, SkeletonRow } from '../../components/SkeletonLoader';
+import BackdropLoader from '../../components/BackdropLoader';
 
 export default function ProfesorAsistencia() {
     const navigate = useNavigate();
@@ -288,7 +290,11 @@ export default function ProfesorAsistencia() {
                 </div>
 
                 {isLoadingClases ? (
-                    <div className="text-center p-8 text-gray-500">Cargando tus clases de hoy...</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mt-6">
+                        <SkeletonCard />
+                        <SkeletonCard />
+                        <SkeletonCard />
+                    </div>
                 ) : clasesHoy.length === 0 ? (
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 text-center max-w-md mx-auto mt-10">
                         <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2">No hay clases registradas hoy</h2>
@@ -348,8 +354,9 @@ export default function ProfesorAsistencia() {
     const totalPresentesEfectivos = presentes + atrasos;
 
     return (
-        <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+        <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8 relative">
             <Toaster position="top-right" toastOptions={{ className: 'dark:!bg-gray-800 dark:!text-white dark:border dark:!border-gray-700' }} />
+            {isSaving && <BackdropLoader mensaje="Firmando y enviando datos..." />}
 
             {/* CABECERA OPERATIVA */}
             <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -398,7 +405,13 @@ export default function ProfesorAsistencia() {
 
                         <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-125 overflow-y-auto custom-scrollbar">
                             {isLoading ? (
-                                <div className="p-8 text-center text-gray-500">Cargando alumnos...</div>
+                                <div className="space-y-1">
+                                    <SkeletonRow />
+                                    <SkeletonRow />
+                                    <SkeletonRow />
+                                    <SkeletonRow />
+                                    <SkeletonRow />
+                                </div>
                             ) : alumnos.length === 0 ? (
                                 <div className="p-8 text-center text-gray-500">Este curso aún no tiene alumnos matriculados.</div>
                             ) : alumnos.map((alumno) => (

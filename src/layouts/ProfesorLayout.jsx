@@ -3,8 +3,7 @@ import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { mockUsers } from '../utils/mockUsers';
 import { supabase } from '../config/supabaseClient';
 import logoTexto from '../assets/logo_texto.png';
-import UserAvatar from '../components/UserAvatar';
-
+import TopHeader from '../components/TopHeader';
 export default function ProfesorLayout() {
   const [user, setUser] = useState(null);
   const [avatarLayout, setAvatarLayout] = useState(null);
@@ -98,7 +97,7 @@ export default function ProfesorLayout() {
   };
 
   return (
-    <div className="min-h-screen flex bg-gray-50 dark:bg-gray-900 font-sans transition-colors duration-300">
+    <div className="h-screen overflow-hidden flex bg-gray-50 dark:bg-gray-900 font-sans transition-colors duration-300">
 
       {/* Overlay oscuro para móvil */}
       {isMobileMenuOpen && (
@@ -119,13 +118,7 @@ export default function ProfesorLayout() {
               <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
             </div>
           )}
-
-          <button onClick={() => setIsCollapsed(!isCollapsed)} className="hidden lg:block text-gray-500 hover:text-gray-700 focus:outline-none shrink-0">
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-
+          
           <button onClick={() => setIsMobileMenuOpen(false)} className="text-gray-500 hover:text-gray-600 lg:hidden shrink-0">
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -276,72 +269,23 @@ export default function ProfesorLayout() {
             </nav>
           </div>
 
-          <div className={`mt-8 mb-4 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-            <h2 className={`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 ${isCollapsed ? 'hidden' : 'block'}`}>Configuración</h2>
-            <nav className="space-y-1">
-              <button
-                onClick={handleToggleTheme}
-                title={isCollapsed ? "Cambiar Tema" : ""}
-                className={`w-full flex items-center py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors ${isCollapsed ? 'justify-center px-0' : 'px-4'}`}
-              >
-                <div className={`shrink-0 transition-transform duration-500 ${isDarkMode ? 'rotate-180' : 'rotate-0'} ${isCollapsed ? '' : 'mr-3'}`}>
-                  {isDarkMode ? (
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                  ) : (
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-                  )}
-                </div>
-                {!isCollapsed && <span>{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>}
-              </button>
-            </nav>
-          </div>
-        </div>
-
-        {/* Perfil del Profesor & Botones de Sistema */}
-        <div className="border-t border-gray-200 dark:border-gray-700 mt-auto">
-          <div className={`p-4 flex ${isCollapsed ? 'flex-col items-center gap-4' : 'items-center'}`}>
-            <div
-              onClick={() => navigate('/panel/profesor/mi-perfil')}
-              className="flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 p-1 -ml-1 rounded-lg transition-colors"
-              title="Ver mi perfil"
-            >
-              <div className="shrink-0">
-                <UserAvatar 
-                  nombre={user ? (user.name || user.nombre || 'Profesor') : 'Profesor'}
-                  avatarUrl={avatarLayout}
-                  className="h-8 w-8 text-sm"
-                />
-              </div>
-              {!isCollapsed && (
-                <div className="ml-3 overflow-hidden">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{user ? (user.name || user.nombre) : 'Profesor'}</p>
-                  <p className="text-xs text-gray-500 capitalize truncate">{user ? user.role : 'Docente'}</p>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={handleLogout}
-              className={`${isCollapsed ? '' : 'ml-auto'} text-gray-400 hover:text-red-600 transition-colors`}
-              title="Cerrar sesión"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
-          </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
-        <header className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between z-30 transition-colors duration-300">
-          <div className="flex items-center space-x-2 cursor-pointer" onClick={() => { navigate('/panel/profesor'); setIsMobileMenuOpen(false); }}>
-            <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
-          </div>
-          <button onClick={() => setIsMobileMenuOpen(true)} className="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white focus:outline-none">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
-          </button>
-        </header>
+        <TopHeader
+          user={user}
+          avatarLayout={avatarLayout}
+          isCollapsed={isCollapsed}
+          setIsCollapsed={setIsCollapsed}
+          isMobileMenuOpen={isMobileMenuOpen}
+          setIsMobileMenuOpen={setIsMobileMenuOpen}
+          isDarkMode={isDarkMode}
+          handleToggleTheme={handleToggleTheme}
+          handleLogout={handleLogout}
+          profilePath="/panel/profesor/mi-perfil"
+        />
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
           <Outlet />

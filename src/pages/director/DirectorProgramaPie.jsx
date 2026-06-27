@@ -5,6 +5,8 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import UserAvatar from '../../components/UserAvatar';
 import toast, { Toaster } from 'react-hot-toast';
+import { SkeletonRow } from '../../components/SkeletonLoader';
+import BackdropLoader from '../../components/BackdropLoader';
 
 export default function DirectorProgramaPie() {
   const navigate = useNavigate();
@@ -240,13 +242,14 @@ export default function DirectorProgramaPie() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8 relative">
       <Toaster 
         position="top-right"
         toastOptions={{
           className: 'dark:!bg-gray-800 dark:!text-white dark:border dark:!border-gray-700'
         }}
       />
+      {isExportingNomina && <BackdropLoader mensaje="Generando Nómina PIE..." />}
 
       {/* CABECERA */}
       <div className="mb-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -263,12 +266,8 @@ export default function DirectorProgramaPie() {
           disabled={isExportingNomina || estudiantesPie.length === 0}
           className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-colors sm:w-auto w-full disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          {isExportingNomina ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-          )}
-          {isExportingNomina ? 'Generando Nómina...' : 'Exportar Nómina Mineduc'}
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+          Exportar Nómina Mineduc
         </button>
       </div>
 
@@ -368,7 +367,12 @@ export default function DirectorProgramaPie() {
 
         <div className="p-0">
           {isLoading ? (
-            <div className="p-16 flex justify-center"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
           ) : (
             <>
               {/* --- PILAR A: ALUMNOS --- */}

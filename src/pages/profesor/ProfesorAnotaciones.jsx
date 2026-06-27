@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import BackdropLoader from '../../components/BackdropLoader';
 
 export default function ProfesorAnotaciones() {
   const [user, setUser] = useState(null);
@@ -237,8 +238,9 @@ export default function ProfesorAnotaciones() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8 relative">
       <Toaster position="top-right" toastOptions={{ className: 'dark:bg-gray-800 dark:text-white dark:border dark:border-gray-700' }} />
+      {isSaving && <BackdropLoader mensaje="Guardando anotación..." />}
       
       {/* CABECERA */}
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
-
+import { SkeletonCard, SkeletonBase } from '../../components/SkeletonLoader';
+import BackdropLoader from '../../components/BackdropLoader';
 export default function DirectorConfiguracion() {
   const [config, setConfig] = useState({
     nombre_colegio: '',
@@ -93,8 +94,9 @@ export default function DirectorConfiguracion() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex justify-center items-center bg-gray-50/50 dark:bg-gray-900 pb-10">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex-1 p-8 space-y-6 bg-gray-50/50 dark:bg-gray-900">
+        <SkeletonBase className="w-1/3 h-8" />
+        <SkeletonCard className="h-96 max-w-3xl" />
       </div>
     );
   }
@@ -108,7 +110,8 @@ export default function DirectorConfiguracion() {
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Datos maestros para la generación automática de certificados y documentos.</p>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-6 sm:p-8 max-w-3xl">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-6 sm:p-8 max-w-3xl relative overflow-hidden">
+        {isSaving && <BackdropLoader mensaje="Guardando configuración..." />}
         <form onSubmit={guardarCambios} className="space-y-6">
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -189,14 +192,8 @@ export default function DirectorConfiguracion() {
               disabled={isSaving}
               className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
             >
-              {isSaving ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
-                  Guardar Configuración
-                </>
-              )}
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+              Guardar Configuración
             </button>
           </div>
 

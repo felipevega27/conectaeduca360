@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
+import { SkeletonRow } from '../../components/SkeletonLoader';
+import BackdropLoader from '../../components/BackdropLoader';
 
 export default function DirectorSAT() {
   const [alumnosRiesgo, setAlumnosRiesgo] = useState([]);
@@ -189,10 +191,12 @@ export default function DirectorSAT() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan="4" className="p-10 text-center">
-                    <div className="flex flex-col items-center justify-center gap-3">
-                      <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin mx-auto"></div>
-                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Cargando...</span>
+                  <td colSpan="4" className="p-0">
+                    <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                      <SkeletonRow />
+                      <SkeletonRow />
+                      <SkeletonRow />
+                      <SkeletonRow />
                     </div>
                   </td>
                 </tr>
@@ -255,7 +259,8 @@ export default function DirectorSAT() {
       {/* --- MODAL PARA INICIAR PLAN DE RETENCIÓN --- */}
       {isModalOpen && alumnoSeleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm px-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg border border-gray-200 dark:border-gray-700 animate-[fadeInUp_0.2s_ease-out] overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg border border-gray-200 dark:border-gray-700 animate-[fadeInUp_0.2s_ease-out] overflow-hidden relative">
+            {isSaving && <BackdropLoader mensaje="Guardando plan..." />}
             
             <div className="bg-blue-50 dark:bg-blue-900/30 p-6 border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-start justify-between">
@@ -317,11 +322,7 @@ export default function DirectorSAT() {
                   disabled={isSaving}
                   className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-70 flex justify-center items-center"
                 >
-                  {isSaving ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    "Guardar y Activar Plan"
-                  )}
+                  Guardar y Activar Plan
                 </button>
               </div>
             </form>

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import UserAvatar from '../../components/UserAvatar';
+import { SkeletonCard, SkeletonRow, SkeletonBase } from '../../components/SkeletonLoader';
+import BackdropLoader from '../../components/BackdropLoader';
 
 // Importa aquí tu imagen desde la carpeta assets. Cambia 'tu-imagen.jpg' por el nombre real de tu archivo.
 import portadaImg from '../../assets/FONDO PERFILES.png';
@@ -222,9 +224,11 @@ export default function DirectorPerfilAlumno() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 h-full min-h-screen">
-        <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-3">Procesando Ficha De Alumno...</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando perfil del estudiante...</p>
+        </div>
       </div>
     );
   }
@@ -555,7 +559,8 @@ export default function DirectorPerfilAlumno() {
       {/* --- MODAL DE EDICIÓN --- */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm px-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700 animate-[fadeInUp_0.2s_ease-out] overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700 animate-[fadeInUp_0.2s_ease-out] overflow-hidden relative">
+            {isSaving && <BackdropLoader mensaje="Guardando..." />}
             <div className="flex justify-between items-center px-6 py-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Editar Expediente del Alumno</h2>
               <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
@@ -592,7 +597,7 @@ export default function DirectorPerfilAlumno() {
               <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
                 <button type="submit" disabled={isSaving} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-all shadow-md shadow-blue-600/20 flex justify-center items-center disabled:opacity-70">
-                  {isSaving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Guardar Cambios'}
+                  Guardar Cambios
                 </button>
               </div>
             </form>

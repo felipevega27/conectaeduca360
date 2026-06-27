@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import portadaImg from '../../assets/FONDO PERFILES.png';
+import { SkeletonCard, SkeletonBase } from '../../components/SkeletonLoader';
 
 export default function MiPerfil() {
   const [sessionUser, setSessionUser] = useState(null);
@@ -174,8 +175,16 @@ export default function MiPerfil() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex justify-center items-center py-20 dark:bg-gray-900 min-h-screen">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8 min-h-screen">
+        <div className="max-w-5xl mx-auto space-y-6">
+          <SkeletonBase className="h-48 w-full rounded-2xl" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <SkeletonCard />
+            <div className="md:col-span-2">
+              <SkeletonCard />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

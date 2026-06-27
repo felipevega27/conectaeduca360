@@ -3,6 +3,7 @@ import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import logoTexto from '../../assets/logo_texto.png';
+import BackdropLoader from '../../components/BackdropLoader';
 
 export default function ProfesorTareasNueva() {
   const navigate = useNavigate();
@@ -379,7 +380,11 @@ export default function ProfesorTareasNueva() {
         </div>
       </div>
 
-      <div className="max-w-4xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-6 sm:p-8 space-y-8">
+      <div className="max-w-4xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-6 sm:p-8 space-y-8 relative overflow-hidden">
+        
+        {isSaving && (
+          <BackdropLoader mensaje="Guardando cambios..." />
+        )}
 
         {/* INTERRUPTOR INTELIGENTE */}
         <div className="flex bg-gray-100 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700/50">
@@ -580,7 +585,11 @@ export default function ProfesorTareasNueva() {
       {/* MODAL IA INTELIGENTE (BIFURCADO) */}
       {isPromptModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/70 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-xl p-7 border border-gray-200 dark:border-gray-700 animate-fade-in-up">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-xl p-7 border border-gray-200 dark:border-gray-700 animate-fade-in-up relative overflow-hidden">
+            {isGenerating && (
+              <BackdropLoader mensaje="Diseñando contenido pedagógico..." />
+            )}
+            
             <div className="flex items-center gap-3 mb-2">
               <div className="bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 p-2.5 rounded-xl">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>

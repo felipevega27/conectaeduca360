@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FichaAlumnoDrawer from '../../components/FichaAlumnoDrawer';
 import { supabase } from '../../config/supabaseClient';
+import { SkeletonRow } from '../../components/SkeletonLoader';
 
 export default function DirectorAlertasAsistencia() {
   const navigate = useNavigate();
@@ -118,14 +119,12 @@ export default function DirectorAlertasAsistencia() {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700 text-sm text-gray-700 dark:text-gray-300">
               {isLoading ? (
-                <tr>
-                  <td colSpan="6" className="p-10 text-center">
-                    <div className="flex flex-col items-center justify-center gap-3">
-                      <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin mx-auto"></div>
-                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Cargando...</span>
-                    </div>
-                  </td>
-                </tr>
+                <>
+                  <tr><td colSpan="6" className="p-4"><SkeletonRow /></td></tr>
+                  <tr><td colSpan="6" className="p-4"><SkeletonRow /></td></tr>
+                  <tr><td colSpan="6" className="p-4"><SkeletonRow /></td></tr>
+                  <tr><td colSpan="6" className="p-4"><SkeletonRow /></td></tr>
+                </>
               ) : alumnosCriticos.length > 0 ? (
                 alumnosCriticos.map((alumno) => (
                   <tr key={alumno.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">

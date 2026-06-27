@@ -9,6 +9,8 @@ import autoTable from 'jspdf-autotable';
 import { initSchoolPdf, addPdfFooter } from '../../utils/pdfUtils';
 import toast, { Toaster } from 'react-hot-toast';
 import useDirectorDashboard from '../../hooks/useDirectorDashboard';
+import { SkeletonRow } from '../../components/SkeletonLoader';
+import BackdropLoader from '../../components/BackdropLoader';
 
 export default function DirectorDashboard() {
   const navigate = useNavigate();
@@ -397,8 +399,9 @@ export default function DirectorDashboard() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8 relative">
       <Toaster position="top-right" toastOptions={{ className: 'dark:!bg-gray-800 dark:!text-white dark:border dark:!border-gray-700' }} />
+      {isExporting && <BackdropLoader mensaje="Exportando informe SIGE..." />}
 
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
@@ -658,9 +661,11 @@ export default function DirectorDashboard() {
 
         <div className="overflow-x-auto">
           {isLoading ? (
-            <div className="p-10 flex flex-col items-center justify-center gap-3">
-              <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
-              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Cargando...</span>
+            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
             </div>
           ) : (
             <table className="w-full text-left text-sm">
@@ -763,21 +768,14 @@ export default function DirectorDashboard() {
               </label>
             </div>
 
-            {isExporting ? (
-              <div className="flex flex-col w-full items-center justify-center py-2 gap-3">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Exportando informe...</span>
-              </div>
-            ) : (
-              <div className="flex gap-3">
-                <button onClick={() => setIsExportModalOpen(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                  Cancelar
-                </button>
-                <button onClick={handleExport} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20">
-                  Descargar
-                </button>
-              </div>
-            )}
+            <div className="flex gap-3">
+              <button onClick={() => setIsExportModalOpen(false)} disabled={isExporting} className="flex-1 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={handleExport} disabled={isExporting} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-50">
+                Descargar
+              </button>
+            </div>
           </div>
         </div>
       )}

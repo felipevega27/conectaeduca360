@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import UserAvatar from '../../components/UserAvatar';
+import { SkeletonCard, SkeletonRow, SkeletonBase } from '../../components/SkeletonLoader';
+import BackdropLoader from '../../components/BackdropLoader';
 
 // Reutilizamos la misma imagen de portada
 import portadaImg from '../../assets/FONDO PERFILES.png';
@@ -116,9 +118,11 @@ export default function DirectorFichaDocente() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 h-full min-h-screen">
-        <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-3">Procesando Ficha Docente...</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando perfil del profesor...</p>
+        </div>
       </div>
     );
   }
@@ -249,7 +253,8 @@ export default function DirectorFichaDocente() {
       {/* MODAL DE EDICIÓN DE PERFIL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm px-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl border border-gray-200 dark:border-gray-700 animate-[fadeInUp_0.2s_ease-out] overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl border border-gray-200 dark:border-gray-700 animate-[fadeInUp_0.2s_ease-out] overflow-hidden flex flex-col max-h-[90vh] relative">
+            {isSaving && <BackdropLoader mensaje="Guardando..." />}
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
               <h2 className="text-xl font-bold text-gray-800 dark:text-white">Editar Perfil Docente</h2>
               <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -296,7 +301,7 @@ export default function DirectorFichaDocente() {
             <div className="p-6 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 shrink-0 flex gap-3">
               <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300 dark:border-gray-600 transition-colors">Cancelar</button>
               <button type="submit" form="editDocenteForm" disabled={isSaving} className="flex-1 py-2.5 rounded-lg bg-emerald-600 text-white font-medium text-sm hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 flex justify-center items-center">
-                {isSaving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Guardar Cambios'}
+                Guardar Cambios
               </button>
             </div>
           </div>

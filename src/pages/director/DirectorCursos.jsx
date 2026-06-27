@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
-
+import { SkeletonCard, SkeletonRow } from '../../components/SkeletonLoader';
+import BackdropLoader from '../../components/BackdropLoader';
 export default function DirectorCursos() {
   const navigate = useNavigate();
   const [cursos, setCursos] = useState([]);
@@ -218,8 +219,13 @@ export default function DirectorCursos() {
 
       {/* GRID DE CURSOS */}
       {isLoading ? (
-        <div className="flex justify-center items-center py-20">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <SkeletonCard className="h-48" />
+          <SkeletonCard className="h-48" />
+          <SkeletonCard className="h-48" />
+          <SkeletonCard className="h-48" />
+          <SkeletonCard className="h-48" />
+          <SkeletonCard className="h-48" />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -301,7 +307,8 @@ export default function DirectorCursos() {
       {/* MODAL DE ASIGNACIÓN */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm px-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700 overflow-hidden animate-[fadeInUp_0.2s_ease-out]">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700 overflow-hidden animate-[fadeInUp_0.2s_ease-out] relative">
+            {isSaving && <BackdropLoader mensaje="Guardando..." />}
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 dark:border-gray-700">
               <h2 className="text-xl font-bold text-gray-800 dark:text-white">Asignar Profesor Jefe</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -328,7 +335,7 @@ export default function DirectorCursos() {
               <div className="flex gap-3">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300 dark:border-gray-600 transition-colors">Cancelar</button>
                 <button type="submit" disabled={isSaving} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 shadow-lg shadow-blue-600/20 flex justify-center items-center">
-                  {isSaving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Guardar Asignación'}
+                  Guardar Asignación
                 </button>
               </div>
             </form>
@@ -339,7 +346,8 @@ export default function DirectorCursos() {
       {/* MODAL CREAR NUEVO CURSO */}
       {isModalNuevoCursoOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm px-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700 animate-[fadeInUp_0.2s_ease-out] overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700 animate-[fadeInUp_0.2s_ease-out] overflow-hidden relative">
+            {isSaving && <BackdropLoader mensaje="Creando curso..." />}
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 dark:border-gray-700">
               <h2 className="text-xl font-bold text-gray-800 dark:text-white">Crear Nuevo Curso</h2>
               <button onClick={() => setIsModalNuevoCursoOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -373,7 +381,7 @@ export default function DirectorCursos() {
               <div className="flex gap-3">
                 <button type="button" onClick={() => setIsModalNuevoCursoOpen(false)} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300 dark:border-gray-600 transition-colors">Cancelar</button>
                 <button type="submit" disabled={isSaving} className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 shadow-lg shadow-blue-600/20 flex justify-center items-center">
-                  {isSaving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Crear Curso'}
+                  Crear Curso
                 </button>
               </div>
             </form>
@@ -397,9 +405,11 @@ export default function DirectorCursos() {
             
             <div className="p-6 overflow-y-auto flex-1">
               {isLoadingAlumnos ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-sm text-gray-500 font-medium">Cargando nómina de alumnos...</p>
+                <div className="space-y-3">
+                  <SkeletonRow />
+                  <SkeletonRow />
+                  <SkeletonRow />
+                  <SkeletonRow />
                 </div>
               ) : alumnosModalData.length > 0 ? (
                 <div className="space-y-3">

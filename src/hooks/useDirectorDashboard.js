@@ -17,96 +17,67 @@ export default function useDirectorDashboard() {
     try {
       setIsLoading(true);
 
-      // INTENTO 1: Usar RPC optimizado (Fase 3)
-      const { data: kpis, error: kpiError } = await supabase.rpc('obtener_kpis_director');
+      // Carga manual de KPIs (sin RPC)
+      setIsUsingFallback(true);
 
-      if (!kpiError && kpis) {
-        setTotalAlumnos(kpis.matriculas.total);
+      const { data: listaMatriculas } = await supabase.from('matriculas').select('rut_alumno, condicion_estudiante, cursos(nombre)');
+      if (listaMatriculas && listaMatriculas.length > 0) {
+        const total = listaMatriculas.length;
+        setTotalAlumnos(total);
+        let conteoRegular = 0, conteoSEP = 0, conteoPIE = 0;
+        listaMatriculas.forEach(alumno => {
+          const condicion = alumno.condicion_estudiante?.toUpperCase().trim();
+          if (condicion === 'REGULAR') conteoRegular++;
+          else if (condicion === 'SEP' || condicion === 'PRIORITARIO') conteoSEP++;
+          else if (condicion === 'PIE') conteoPIE++;
+        });
         setPorcentajes({
-          regular: kpis.matriculas.porcentaje_regular,
-          sep: kpis.matriculas.porcentaje_sep,
-          pie: kpis.matriculas.porcentaje_pie
+          regular: Math.round((conteoRegular / total) * 100) || 0,
+          sep: Math.round((conteoSEP / total) * 100) || 0,
+          pie: Math.round((conteoPIE / total) * 100) || 0
         });
-        setAsistenciaGlobal(kpis.asistencia.global_porcentaje);
-        setAlumnosRiesgo(kpis.asistencia.alumnos_riesgo);
-        setMetricasUTP({
-          coberturaPromedio: kpis.utp.cobertura_promedio,
-          alDia: kpis.utp.al_dia,
-          atrasados: kpis.utp.atrasados,
-          pendientes: kpis.utp.pendientes,
-          porcentajeAlDia: (kpis.utp.al_dia + kpis.utp.atrasados) > 0 
-            ? Math.round((kpis.utp.al_dia / (kpis.utp.al_dia + kpis.utp.atrasados)) * 100) 
-            : 100
-        });
-        setMetricasPIE({
-          porcentaje: kpis.pie.porcentaje_al_dia,
-          pendientes: kpis.pie.pendientes_fudei
-        });
-        setProtocolosActivos(kpis.convivencia.protocolos_activos);
-      } else {
-        // FALLBACK: Si falla el RPC (ej. no se corrió el script SQL), hacemos la carga manual tradicional
-        console.warn("RPC no encontrado o falló. Usando modo compatibilidad (Carga Manual)...", kpiError);
-        setIsUsingFallback(true);
-
-        const { data: listaMatriculas } = await supabase.from('matriculas').select('rut_alumno, condicion_estudiante, cursos(nombre)');
-        if (listaMatriculas && listaMatriculas.length > 0) {
-          const total = listaMatriculas.length;
-          setTotalAlumnos(total);
-          let conteoRegular = 0, conteoSEP = 0, conteoPIE = 0;
-          listaMatriculas.forEach(alumno => {
-            const condicion = alumno.condicion_estudiante?.toUpperCase().trim();
-            if (condicion === 'REGULAR') conteoRegular++;
-            else if (condicion === 'SEP' || condicion === 'PRIORITARIO') conteoSEP++;
-            else if (condicion === 'PIE') conteoPIE++;
-          });
-          setPorcentajes({
-            regular: Math.round((conteoRegular / total) * 100) || 0,
-            sep: Math.round((conteoSEP / total) * 100) || 0,
-            pie: Math.round((conteoPIE / total) * 100) || 0
-          });
-        }
-
-        const { data: listaAsistencia } = await supabase.from('asistencia_alumnos').select('*');
-        if (listaAsistencia && listaAsistencia.length > 0) {
-          const totalRegistros = listaAsistencia.length;
-          const presentesYAtrasos = listaAsistencia.filter(a => a.estado === 'Presente' || a.estado === 'Atraso').length;
-          setAsistenciaGlobal(Math.round((presentesYAtrasos / totalRegistros) * 100));
-          const ausencias = listaAsistencia.filter(a => a.estado === 'Ausente');
-          const alumnosUnicosConAusencia = new Set(ausencias.map(a => a.rut_alumno));
-          setAlumnosRiesgo(alumnosUnicosConAusencia.size);
-        }
-
-        const { data: planificaciones } = await supabase.from('planificaciones').select('*');
-        if (planificaciones && planificaciones.length > 0) {
-          const hoy = new Date();
-          const sumaCobertura = planificaciones.reduce((acc, plan) => acc + (plan.cobertura_porcentaje || 0), 0);
-          const coberturaPromedio = Math.round(sumaCobertura / planificaciones.length);
-          const pendientes = planificaciones.filter(p => p.estado_entrega === 'Pendiente de Revisión').length;
-
-          let atrasados = 0, alDia = 0;
-          planificaciones.forEach(plan => {
-            const fechaLimite = new Date(plan.fecha_limite);
-            if (fechaLimite < hoy && plan.estado_entrega !== 'Aprobada') atrasados++;
-            else alDia++;
-          });
-
-          const totalParaEntrega = alDia + atrasados;
-          const porcentajeAlDia = totalParaEntrega > 0 ? Math.round((alDia / totalParaEntrega) * 100) : 100;
-          setMetricasUTP({ coberturaPromedio, pendientes, alDia, atrasados, porcentajeAlDia });
-        }
-
-        const { data: horasPIE } = await supabase.from('pie_horas_curso').select('horas_requeridas, horas_asignadas');
-        if (horasPIE && horasPIE.length > 0) {
-          let reqTotal = 0, asigTotal = 0;
-          horasPIE.forEach(h => { reqTotal += h.horas_requeridas || 0; asigTotal += h.horas_asignadas || 0; });
-          const pendientesPIE = reqTotal - asigTotal;
-          const porcentajePIE = reqTotal > 0 ? Math.round((asigTotal / reqTotal) * 100) : 100;
-          setMetricasPIE({ porcentaje: porcentajePIE, pendientes: pendientesPIE > 0 ? pendientesPIE : 0 });
-        }
-
-        const { data: casosConvivencia } = await supabase.from('casos_convivencia').select('id').eq('estado_protocolo', 'Activo');
-        setProtocolosActivos(casosConvivencia ? casosConvivencia.length : 0);
       }
+
+      const { data: listaAsistencia } = await supabase.from('asistencia_alumnos').select('*');
+      if (listaAsistencia && listaAsistencia.length > 0) {
+        const totalRegistros = listaAsistencia.length;
+        const presentesYAtrasos = listaAsistencia.filter(a => a.estado === 'Presente' || a.estado === 'Atraso').length;
+        setAsistenciaGlobal(Math.round((presentesYAtrasos / totalRegistros) * 100));
+        const ausencias = listaAsistencia.filter(a => a.estado === 'Ausente');
+        const alumnosUnicosConAusencia = new Set(ausencias.map(a => a.rut_alumno));
+        setAlumnosRiesgo(alumnosUnicosConAusencia.size);
+      }
+
+      const { data: planificaciones } = await supabase.from('planificaciones').select('*');
+      if (planificaciones && planificaciones.length > 0) {
+        const hoy = new Date();
+        const sumaCobertura = planificaciones.reduce((acc, plan) => acc + (plan.cobertura_porcentaje || 0), 0);
+        const coberturaPromedio = Math.round(sumaCobertura / planificaciones.length);
+        const pendientes = planificaciones.filter(p => p.estado_entrega === 'Pendiente de Revisión').length;
+
+        let atrasados = 0, alDia = 0;
+        planificaciones.forEach(plan => {
+          const fechaLimite = new Date(plan.fecha_limite);
+          if (fechaLimite < hoy && plan.estado_entrega !== 'Aprobada') atrasados++;
+          else alDia++;
+        });
+
+        const totalParaEntrega = alDia + atrasados;
+        const porcentajeAlDia = totalParaEntrega > 0 ? Math.round((alDia / totalParaEntrega) * 100) : 100;
+        setMetricasUTP({ coberturaPromedio, pendientes, alDia, atrasados, porcentajeAlDia });
+      }
+
+      const { data: horasPIE } = await supabase.from('pie_horas_curso').select('horas_requeridas, horas_asignadas');
+      if (horasPIE && horasPIE.length > 0) {
+        let reqTotal = 0, asigTotal = 0;
+        horasPIE.forEach(h => { reqTotal += h.horas_requeridas || 0; asigTotal += h.horas_asignadas || 0; });
+        const pendientesPIE = reqTotal - asigTotal;
+        const porcentajePIE = reqTotal > 0 ? Math.round((asigTotal / reqTotal) * 100) : 100;
+        setMetricasPIE({ porcentaje: porcentajePIE, pendientes: pendientesPIE > 0 ? pendientesPIE : 0 });
+      }
+
+      const { data: casosConvivencia } = await supabase.from('casos_convivencia').select('id').eq('estado_protocolo', 'Activo');
+      setProtocolosActivos(casosConvivencia ? casosConvivencia.length : 0);
 
       // CARGA DE ALERTAS (Siempre local porque se necesitan los nombres y el payload es ligero con limit)
       const { data: alertasRaw } = await supabase

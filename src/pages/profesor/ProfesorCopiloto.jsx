@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import { initSchoolPdf, addPdfFooter } from '../../utils/pdfUtils';
 import autoTable from 'jspdf-autotable';
+import BackdropLoader from '../../components/BackdropLoader';
 
 export default function ProfesorCopiloto() {
   const [herramienta, setHerramienta] = useState('rubrica');
@@ -315,12 +316,11 @@ export default function ProfesorCopiloto() {
 
         {/* RESULTADO */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl text-gray-800 dark:text-gray-200 overflow-hidden h-[500px] shadow-sm flex flex-col relative">
-          {isGenerating ? (
-            <div className="h-full flex flex-col items-center justify-center space-y-4 p-6">
-               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
-               <p className="text-gray-500 dark:text-gray-400">Generando material pedagógico de alta calidad...</p>
-            </div>
-          ) : resultado ? (
+          {isGenerating && (
+            <BackdropLoader mensaje="Generando material pedagógico de alta calidad..." />
+          )}
+          
+          {resultado ? (
             <>
               <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
                 <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100">Resultado de la IA</h3>

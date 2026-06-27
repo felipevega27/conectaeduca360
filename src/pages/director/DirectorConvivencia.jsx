@@ -8,6 +8,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import logoImg from '../../assets/logo.png'; // <-- LOGO PRINCIPAL
 import toast, { Toaster } from 'react-hot-toast';
+import { SkeletonRow } from '../../components/SkeletonLoader';
 
 export default function DirectorConvivencia() {
   const chartTiposRef = useRef(null);
@@ -503,9 +504,10 @@ export default function DirectorConvivencia() {
 
           <div className="p-6 flex-1 bg-gray-50/50 dark:bg-gray-800/50 overflow-y-auto max-h-125">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full py-10 gap-3">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Sincronizando bitácora...</span>
+              <div className="space-y-3">
+                <SkeletonRow />
+                <SkeletonRow />
+                <SkeletonRow />
               </div>
             ) : (
               <div className="space-y-3">

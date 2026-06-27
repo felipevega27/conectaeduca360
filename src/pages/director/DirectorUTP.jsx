@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
+import { SkeletonRow } from '../../components/SkeletonLoader';
 
 export default function DirectorUTP() {
     const navigate = useNavigate();
@@ -112,9 +113,12 @@ export default function DirectorUTP() {
                 {/* TABLA DE PLANIFICACIONES */}
                 <div className="p-0 overflow-x-auto">
                     {isLoading ? (
-                        <div className="p-10 flex flex-col items-center justify-center gap-3">
-                            <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
-                            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Cargando...</span>
+                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                            <SkeletonRow />
+                            <SkeletonRow />
+                            <SkeletonRow />
+                            <SkeletonRow />
+                            <SkeletonRow />
                         </div>
                     ) : (
                         <table className="w-full text-left text-sm">
