@@ -153,10 +153,10 @@ export default function ProfesorDashboard() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       
       {/* CABECERA DINÁMICA */}
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">
             ¡Hola, {user ? user.nombre?.split(' ')[0] : 'Profesor'}!
@@ -172,7 +172,7 @@ export default function ProfesorDashboard() {
 
       {/* ALERTAS OBLIGATORIAS MINEDUC */}
       {clasesHoy.some(c => !c.leccionarioFirmado && c.estado !== 'Pendiente') && (
-        <div className="mb-8 p-4 rounded-xl border border-orange-200 dark:border-orange-800/50 bg-orange-50 dark:bg-orange-900/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
+        <div className="mb-3 p-4 rounded-xl border border-orange-200 dark:border-orange-800/50 bg-orange-50 dark:bg-orange-900/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
           <div className="flex items-start gap-3">
             <div className="bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400 p-2 rounded-lg mt-0.5">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>

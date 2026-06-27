@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
-import { mockUsers } from '../utils/mockUsers';
+import { supabase } from '../config/supabaseClient';
 import logoTexto from '../assets/logo_texto.png';
+import logoImg from '../assets/logo.png';
 import TopHeader from '../components/TopHeader';
 
 export default function AlumnoLayout() {
@@ -20,18 +21,22 @@ export default function AlumnoLayout() {
   const location = useLocation();
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      setUser(JSON.parse(loggedUserJSON));
-    } else {
-      const fallbackUser = mockUsers.find(u => u.role === 'alumno');
-      setUser(fallbackUser || { nombre: 'Claudia Pérez', role: 'Apoderado', alumno: 'Martina Fernández' });
-    }
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        setUser(profile);
+      }
+    };
+    fetchUser();
   }, []);
 
   // Efecto para aplicar o quitar la clase dark del HTML
   useEffect(() => {
-    console.log("[AlumnoLayout] Aplicando efecto de tema. Estado isDarkMode:", isDarkMode);
     try {
       if (isDarkMode) {
         document.documentElement.classList.add('dark');
@@ -40,16 +45,13 @@ export default function AlumnoLayout() {
         document.documentElement.classList.remove('dark');
         localStorage.setItem('theme', 'light');
       }
-      console.log("[AlumnoLayout] Clases en <html> resultantes:", document.documentElement.className);
       window.dispatchEvent(new Event('themeChanged'));
     } catch (error) {
       console.error("[AlumnoLayout] Error crítico al cambiar tema:", error);
-      alert("Error al intentar aplicar el tema: " + error.message);
     }
   }, [isDarkMode]);
 
   const handleToggleTheme = () => {
-    console.log("[AlumnoLayout] Botón de tema presionado.");
     setIsDarkMode(prev => !prev);
   };
 
@@ -57,12 +59,10 @@ export default function AlumnoLayout() {
     setIsLogoutModalOpen(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setIsLoggingOut(true);
-    setTimeout(() => {
-      localStorage.removeItem('userLogged');
-      navigate('/');
-    }, 1500);
+    await supabase.auth.signOut();
+    navigate('/');
   };
 
   const isItemActive = (itemPath, exact = false) => {
@@ -82,17 +82,20 @@ export default function AlumnoLayout() {
       )}
 
       {/* SIDEBAR FAMILIA */}
-      <div className={`fixed inset-y-0 left-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-sm flex flex-col transition-all duration-300 lg:static lg:translate-x-0 ${
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-      } ${isCollapsed ? 'w-20' : 'w-64'}`}>
+      <div className={`fixed inset-y-0 left-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-sm flex flex-col transition-all duration-300 lg:static lg:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${isCollapsed ? 'lg:w-20 w-64' : 'w-64'}`}>
         
-        {/* Header del Sidebar */}
-        <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
-          {!isCollapsed && (
-            <div className="flex items-center space-x-2 overflow-hidden cursor-pointer" onClick={() => { navigate('/panel/alumno'); setIsMobileMenuOpen(false); }}>
-              <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
-            </div>
-          )}
+        {/* Sidebar Header */}
+        <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${isCollapsed ? 'lg:justify-center justify-between px-4' : 'justify-between px-4'}`}>
+          {/* LOGO COMPLETO: Visible en móvil siempre, o en PC si no está colapsado */}
+          <div className={`flex items-center space-x-2 overflow-hidden cursor-pointer ${isCollapsed ? 'lg:hidden' : ''}`} onClick={() => { navigate('/panel/alumno'); setIsMobileMenuOpen(false); }}>
+            <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
+          </div>
+
+          {/* LOGO ICONO: Visible SOLO en PC cuando está colapsado */}
+          <div className={`items-center justify-center cursor-pointer ${isCollapsed ? 'hidden lg:flex' : 'hidden'}`} onClick={() => { navigate('/panel/alumno'); setIsMobileMenuOpen(false); }}>
+            <img src={logoImg} alt="Logo" className="h-8 w-8 object-contain transition-transform hover:scale-105" />
+          </div>
           <button onClick={() => setIsMobileMenuOpen(false)} className="text-gray-500 hover:text-gray-600 lg:hidden shrink-0 transition-colors">
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
@@ -206,7 +209,7 @@ export default function AlumnoLayout() {
           profilePath="/panel/alumno/mi-perfil"
         />
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-4 pt-2 md:px-6 md:pb-6 md:pt-3 lg:px-8 lg:pb-8 lg:pt-4">
           <Outlet />
         </main>
       </div>
@@ -225,8 +228,9 @@ export default function AlumnoLayout() {
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">¿Seguro que desea cerrar sesión y salir del sistema?</p>
             
             {isLoggingOut ? (
-              <div className="flex w-full items-center justify-center py-2">
+              <div className="flex flex-col w-full items-center justify-center py-4">
                 <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+                <p className="mt-4 text-sm font-bold text-gray-600 dark:text-gray-300">Cerrando sesión...</p>
               </div>
             ) : (
               <div className="flex gap-3">

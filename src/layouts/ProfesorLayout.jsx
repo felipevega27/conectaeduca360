@@ -3,6 +3,7 @@ import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { mockUsers } from '../utils/mockUsers';
 import { supabase } from '../config/supabaseClient';
 import logoTexto from '../assets/logo_texto.png';
+import logoImg from '../assets/logo.png';
 import TopHeader from '../components/TopHeader';
 export default function ProfesorLayout() {
   const [user, setUser] = useState(null);
@@ -109,15 +110,19 @@ export default function ProfesorLayout() {
 
       {/* SIDEBAR PROFESOR */}
       <div className={`fixed inset-y-0 left-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-sm flex flex-col transition-all duration-300 lg:static lg:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-        } ${isCollapsed ? 'w-20' : 'w-64'}`}>
+        } ${isCollapsed ? 'lg:w-20 w-64' : 'w-64'}`}>
 
         {/* Sidebar Header */}
-        <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
-          {!isCollapsed && (
-            <div className="flex items-center space-x-2 overflow-hidden cursor-pointer" onClick={() => { navigate('/panel/profesor'); setIsMobileMenuOpen(false); }}>
-              <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
-            </div>
-          )}
+        <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${isCollapsed ? 'lg:justify-center justify-between px-4' : 'justify-between px-4'}`}>
+          {/* LOGO COMPLETO: Visible en móvil siempre, o en PC si no está colapsado */}
+          <div className={`flex items-center space-x-2 overflow-hidden cursor-pointer ${isCollapsed ? 'lg:hidden' : ''}`} onClick={() => { navigate('/panel/profesor'); setIsMobileMenuOpen(false); }}>
+            <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
+          </div>
+
+          {/* LOGO ICONO: Visible SOLO en PC cuando está colapsado */}
+          <div className={`items-center justify-center cursor-pointer ${isCollapsed ? 'hidden lg:flex' : 'hidden'}`} onClick={() => { navigate('/panel/profesor'); setIsMobileMenuOpen(false); }}>
+            <img src={logoImg} alt="Logo" className="h-8 w-8 object-contain transition-transform hover:scale-105" />
+          </div>
           
           <button onClick={() => setIsMobileMenuOpen(false)} className="text-gray-500 hover:text-gray-600 lg:hidden shrink-0">
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -287,7 +292,7 @@ export default function ProfesorLayout() {
           profilePath="/panel/profesor/mi-perfil"
         />
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-4 pt-2 md:px-6 md:pb-6 md:pt-3 lg:px-8 lg:pb-8 lg:pt-4">
           <Outlet />
         </main>
       </div>
@@ -306,8 +311,9 @@ export default function ProfesorLayout() {
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">¿Seguro que desea cerrar sesión y salir del sistema?</p>
 
             {isLoggingOut ? (
-              <div className="flex w-full items-center justify-center py-2">
+              <div className="flex flex-col w-full items-center justify-center py-4">
                 <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+                <p className="mt-4 text-sm font-bold text-gray-600 dark:text-gray-300">Cerrando sesión...</p>
               </div>
             ) : (
               <div className="flex gap-3">

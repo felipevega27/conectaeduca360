@@ -86,9 +86,9 @@ export default function DirectorAlertasAsistencia() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       {/* Botón Volver y Título */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-4">
         <button 
           onClick={() => navigate(-1)}
           className="group w-fit flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-blue-600 transition-all"

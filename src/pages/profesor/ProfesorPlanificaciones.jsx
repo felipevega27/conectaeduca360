@@ -208,11 +208,11 @@ export default function ProfesorPlanificaciones() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       <Toaster position="top-right" />
 
       {/* CABECERA */}
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Planificación Curricular</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Estructure sus unidades y conecte sus objetivos con evaluaciones y materiales.</p>
@@ -260,7 +260,7 @@ export default function ProfesorPlanificaciones() {
       </div>
 
       {/* ZONA DE PLANIFICACIONES */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-lg font-black text-gray-800 dark:text-white flex items-center gap-2">
           <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
           Cronograma Anual de Aula

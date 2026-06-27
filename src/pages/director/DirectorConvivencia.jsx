@@ -406,11 +406,11 @@ export default function DirectorConvivencia() {
     );
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       <Toaster position="top-right" toastOptions={{ className: 'dark:!bg-gray-800 dark:!text-white dark:border dark:!border-gray-700' }} />
 
       {/* CABECERA */}
-      <div className="mb-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="mb-3 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Convivencia Escolar</h1>

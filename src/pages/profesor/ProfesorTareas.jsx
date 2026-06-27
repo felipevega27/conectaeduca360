@@ -226,11 +226,11 @@ export default function ProfesorTareas() {
   const formatDate = (dateStr) => { if (!dateStr) return ''; const d = new Date(dateStr + 'T12:00:00'); return d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }); };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 pb-10 px-4 sm:px-8 pt-0">
       <Toaster position="top-right" />
 
       {/* CABECERA */}
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Gestión de Tareas</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Administre las asignaciones, califique entregas y revise el progreso de sus estudiantes.</p>

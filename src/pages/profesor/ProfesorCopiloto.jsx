@@ -256,7 +256,7 @@ export default function ProfesorCopiloto() {
   // ... (El resto de tu JSX se mantiene igual)
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 p-8">
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Copiloto Pedagógico IA</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Bienvenido, {userData?.nombre}. IA configurada para: {asignaturas.join(', ')}</p>

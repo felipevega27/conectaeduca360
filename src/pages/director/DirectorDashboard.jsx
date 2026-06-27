@@ -399,11 +399,11 @@ export default function DirectorDashboard() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8 relative">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0 relative">
       <Toaster position="top-right" toastOptions={{ className: 'dark:!bg-gray-800 dark:!text-white dark:border dark:!border-gray-700' }} />
       {isExporting && <BackdropLoader mensaje="Exportando informe SIGE..." />}
 
-      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      <div className="mb-3 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Panel de Control Directivo</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
@@ -509,7 +509,7 @@ export default function DirectorDashboard() {
       {/* --- GRÁFICOS PRINCIPALES --- */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm lg:col-span-2">
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between">
             <div>
               <h3 className="text-base font-semibold text-gray-800 dark:text-white">Evolución de Asistencia vs Meta Subvención</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Línea base requerida Mineduc: 85%</p>

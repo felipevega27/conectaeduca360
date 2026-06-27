@@ -50,7 +50,7 @@ export default function AlumnoCalificaciones() {
   const asignaturasRiesgo = calificaciones.filter(c => c.promedio < 4.0).length;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       
       {/* CABECERA */}
       <div className="mb-8">

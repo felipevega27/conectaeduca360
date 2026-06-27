@@ -199,18 +199,20 @@ export default function ProfesorCalificaciones() {
   const sumaPorcentajesTotal = evaluaciones.reduce((acc, cur) => acc + (cur.porcentaje || 0), 0);
 
   return (
-    <div className="flex-1 bg-gray-50/50 dark:bg-gray-900 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 bg-gray-50/50 dark:bg-gray-900 pb-10 px-4 sm:px-8 pt-0">
       <Toaster position="top-right" />
 
       {/* CABECERA */}
-      <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <div className="mb-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Libro de Calificaciones</h1>
-          <div className="flex flex-wrap items-center gap-3 mt-2">
+          <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 tracking-tight">
+            Libro de Calificaciones
+          </h1>
+          <div className="flex flex-wrap items-center gap-3 mt-3">
 
             {/* SELECT DE ASIGNATURA */}
             <select
-              className="bg-blue-100 dark:bg-gray-800 text-blue-800 dark:text-blue-400 px-3 py-1.5 rounded-lg text-sm font-bold border border-transparent outline-none"
+              className="bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-2 rounded-xl text-sm font-bold border border-gray-200 dark:border-gray-700 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
               value={selectedAsignaturaId} onChange={(e) => setSelectedAsignaturaId(e.target.value)}
             >
               {misAsignaturas.map(asig => <option key={asig.id} value={asig.id}>{asig.cursos?.nombre} - {asig.nombre}</option>)}
@@ -218,14 +220,14 @@ export default function ProfesorCalificaciones() {
 
             {/* MODIFICADO: NUEVO SELECT DE SEMESTRE */}
             <select
-              className="bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 px-3 py-1.5 rounded-lg text-sm font-bold border border-transparent outline-none"
+              className="bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-2 rounded-xl text-sm font-bold border border-gray-200 dark:border-gray-700 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
               value={semestreSeleccionado} onChange={(e) => setSemestreSeleccionado(e.target.value)}
             >
               <option value="Primer Semestre">1º Semestre</option>
               <option value="Segundo Semestre">2º Semestre</option>
             </select>
 
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${sumaPorcentajesTotal === 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+            <span className={`text-xs font-bold px-3 py-2 rounded-xl shadow-sm border transition-colors ${sumaPorcentajesTotal === 100 ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400' : 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400'}`}>
               Ponderación {semestreSeleccionado === 'Primer Semestre' ? '1ºS' : '2ºS'}: {sumaPorcentajesTotal}% de 100%
             </span>
           </div>
@@ -239,27 +241,32 @@ export default function ProfesorCalificaciones() {
       </div>
 
       {/* PLANILLA */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-x-auto">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-none overflow-x-auto overflow-y-hidden relative">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-gray-50 dark:bg-gray-800 text-[11px] uppercase text-gray-500 border-b border-gray-200 dark:border-gray-700">
-              <th className="p-4 font-bold min-w-[240px] sticky left-0 bg-gray-50 dark:bg-gray-800 z-10 border-r border-gray-200 dark:border-gray-700">
-                Nómina Estudiante ({alumnos.length})
+            <tr className="bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 text-[11px] uppercase text-gray-500 border-b-2 border-gray-200 dark:border-gray-700">
+              <th className="p-4 font-black text-gray-600 dark:text-gray-300 min-w-[260px] sticky left-0 bg-white dark:bg-gray-800 z-20 border-r-2 border-gray-200 dark:border-gray-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                Nómina Estudiante <span className="ml-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded-full text-[10px]">{alumnos.length}</span>
               </th>
 
               {evaluaciones.length === 0 ? (
                 <th className="p-4 text-center text-gray-400">
-                  No hay evaluaciones creadas para el <span className="font-bold text-purple-600">{semestreSeleccionado}</span>.
+                  <div className="flex flex-col items-center justify-center py-4 gap-2">
+                    <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                    <span>No hay evaluaciones creadas para el <span className="font-bold text-indigo-500">{semestreSeleccionado}</span>.</span>
+                  </div>
                 </th>
               ) : (
                 evaluaciones.map((ev, i) => (
-                  <th key={i} className="p-4 text-center min-w-[140px] border-r border-gray-100 dark:border-gray-700">
-                    <span className="text-gray-800 dark:text-gray-200 text-xs font-bold">{ev.nombre}</span>
-                    <div className="mt-1 text-[9px] font-bold text-indigo-600">{ev.tipo_instrumento} ({ev.porcentaje}%)</div>
+                  <th key={i} className="p-4 text-center min-w-[160px] border-r border-gray-100 dark:border-gray-700 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      <span className="text-gray-800 dark:text-gray-200 text-xs font-black tracking-tight leading-tight">{ev.nombre}</span>
+                      <span className="bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 px-2.5 py-1 rounded-md text-[9px] font-bold tracking-wider uppercase shadow-sm border border-indigo-100 dark:border-indigo-800/50">{ev.tipo_instrumento} • {ev.porcentaje}%</span>
+                    </div>
                   </th>
                 ))
               )}
-              <th className="p-4 text-center font-black">Promedio Semestral</th>
+              <th className="p-4 text-center font-black text-indigo-600 dark:text-indigo-400 min-w-[140px] sticky right-0 bg-white dark:bg-gray-800 z-20 border-l-2 border-gray-200 dark:border-gray-700 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">Promedio<br/>Semestral</th>
             </tr>
           </thead>
           <tbody>
@@ -267,10 +274,13 @@ export default function ProfesorCalificaciones() {
               const promedioStr = calcularPromedio(alumno.notasUI, evaluaciones);
               return (
                 <tr key={alumno.rut} className="hover:bg-blue-50/20 dark:hover:bg-gray-700/30">
-                  <td className="p-3 sticky left-0 bg-white dark:bg-gray-800 border-r z-10 border-gray-200">
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setRutFichaSeleccionada(alumno.rut); setIsFichaDrawerOpen(true); }}>
-                      <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-[10px] font-bold">{alumno.nombre.substring(0, 2).toUpperCase()}</div>
-                      <span className="font-bold text-sm text-gray-800 dark:text-white">{alumno.nombre} {alumno.pie && <span className="text-[8px] bg-blue-100 text-blue-700 px-1 rounded ml-1">PIE</span>}</span>
+                  <td className="p-3 sticky left-0 bg-white dark:bg-gray-800 border-r-2 z-10 border-gray-200 dark:border-gray-700 group-hover:bg-blue-50/20 dark:group-hover:bg-gray-700/50 transition-colors">
+                    <div className="flex items-center gap-3 cursor-pointer group/alumno" onClick={() => { setRutFichaSeleccionada(alumno.rut); setIsFichaDrawerOpen(true); }}>
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900 dark:to-purple-900 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xs font-black text-indigo-700 dark:text-indigo-300 shadow-sm group-hover/alumno:scale-105 transition-transform">{alumno.nombre.substring(0, 2).toUpperCase()}</div>
+                      <span className="font-bold text-sm text-gray-800 dark:text-white group-hover/alumno:text-indigo-600 dark:group-hover/alumno:text-indigo-400 transition-colors">
+                        {alumno.nombre} 
+                        {alumno.pie && <span className="inline-flex items-center ml-2 text-[9px] font-black bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-1.5 py-0.5 rounded shadow-sm">PIE</span>}
+                      </span>
                     </div>
                   </td>
                   {evaluaciones.map((evaluacion, colIndex) => {
@@ -278,20 +288,24 @@ export default function ProfesorCalificaciones() {
                     const esRojo = notaObj.valor && parseFloat(notaObj.valor) < 4.0;
                     return (
                       <td key={colIndex} className="p-2 border-r text-center">
-                        <div className="relative inline-block w-12 h-9">
+                        <div className="relative inline-block w-[4.5rem] h-10 group/input">
                           <input
                             type="text" maxLength="3" value={notaObj.valor} placeholder="- -"
                             disabled={!!notaObj.id_bd}
                             onChange={(e) => handleNotaChange(alumno.rut, colIndex, e.target.value)}
                             onBlur={(e) => handleNotaBlur(alumno.rut, colIndex, e.target.value)}
-                            className={`w-full h-full text-center font-black text-sm rounded border focus:outline-none ${notaObj.id_bd ? 'cursor-not-allowed opacity-80 bg-gray-100 dark:bg-gray-700/50' : ''} ${notaObj.valor ? (esRojo ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-indigo-600') : 'bg-transparent text-gray-400'}`}
+                            className={`w-full h-full text-center font-black text-[15px] rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 
+                              ${notaObj.id_bd ? 'cursor-not-allowed opacity-80 bg-gray-100 border-gray-200 dark:bg-gray-700/50 dark:border-gray-600' : ''} 
+                              ${!notaObj.id_bd && notaObj.valor ? (esRojo ? 'bg-red-50 border-red-300 text-red-600 shadow-[inset_0_2px_4px_rgba(220,38,38,0.1)]' : 'bg-blue-50 border-blue-300 text-indigo-700 shadow-[inset_0_2px_4px_rgba(67,56,202,0.1)]') : ''} 
+                              ${!notaObj.id_bd && !notaObj.valor ? 'bg-white border-gray-200 hover:border-gray-300 dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white shadow-sm' : ''}
+                            `}
                           />
                           {!!notaObj.id_bd && (
                             <div
-                              className="absolute inset-0 z-10 cursor-not-allowed"
-                              onClick={() => toast('Esta nota ya ha sido cerrada', { icon: '🔒' })}
+                              className="absolute inset-0 z-10 cursor-not-allowed flex items-start justify-end p-1.5"
+                              onClick={() => toast('Esta nota ya ha sido cerrada y guardada.', { icon: '🔒', id: `toast-${alumno.rut}-${colIndex}` })}
                             >
-                              <div className="absolute top-1 right-1 opacity-70 text-gray-500">
+                              <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-0.5 rounded-full shadow-sm text-gray-500">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
                                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -303,14 +317,16 @@ export default function ProfesorCalificaciones() {
                       </td>
                     );
                   })}
-                  <td className="p-4 text-center align-middle">
-                    <div className="group relative inline-flex items-center justify-center cursor-help">
-                      <span className={`font-black text-lg ${promedioStr === '-' ? 'text-gray-300' : parseFloat(promedioStr) < 4.0 ? 'text-red-600' : 'text-indigo-600'}`}>
+                  <td className="p-4 text-center align-middle sticky right-0 bg-white dark:bg-gray-800 border-l-2 border-gray-200 dark:border-gray-700 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 group-hover:bg-blue-50/20 dark:group-hover:bg-gray-700/50 transition-colors">
+                    <div className="group/promedio relative inline-flex items-center justify-center cursor-help">
+                      <span className={`font-black text-xl px-4 py-1.5 rounded-xl border-2 shadow-sm transition-all duration-300
+                        ${promedioStr === '-' ? 'text-gray-400 bg-gray-50 border-gray-100 dark:bg-gray-800/50 dark:border-gray-700' : parseFloat(promedioStr) < 4.0 ? 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800/50' : 'text-indigo-700 bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-800/50'}
+                      `}>
                         {promedioStr}
                       </span>
-                      <div className="absolute bottom-full right-0 mb-2 w-48 rounded-xl bg-white dark:bg-gray-800 p-3 shadow-[0_10px_30px_rgba(0,0,0,0.15)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] text-left pointer-events-none border border-gray-200 dark:border-gray-700">
-                        <strong className="block text-indigo-600 dark:text-indigo-400 mb-1 text-[11px] uppercase tracking-wider">Promedio Semestral</strong>
-                        <p className="text-gray-600 dark:text-gray-300 font-normal text-[11px] leading-relaxed">promedio final de alumno</p>
+                      <div className="absolute bottom-full right-0 mb-3 w-48 rounded-xl bg-gray-900 dark:bg-white p-3 shadow-xl opacity-0 invisible group-hover/promedio:opacity-100 group-hover/promedio:visible transition-all duration-200 z-[9999] text-left pointer-events-none transform translate-y-2 group-hover/promedio:translate-y-0">
+                        <strong className="block text-white dark:text-gray-900 mb-1 text-[11px] uppercase tracking-wider font-black">Promedio Semestral</strong>
+                        <p className="text-gray-300 dark:text-gray-600 font-medium text-[11px] leading-relaxed">Promedio final ponderado del alumno en este semestre.</p>
                       </div>
                     </div>
                   </td>

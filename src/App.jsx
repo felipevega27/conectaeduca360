@@ -130,6 +130,9 @@ function App() {
             <Route path="/panel/profesor/copiloto" element={<ProfesorCopiloto />} />
             {/* NUEVA RUTA AQUÍ */}
             <Route path="/panel/profesor/planificaciones" element={<ProfesorPlanificaciones />} />
+            {/* RUTAS PARA VER PERFILES DESDE EL BUSCADOR (Comparten componente con Director) */}
+            <Route path="/panel/profesor/perfil-usuario/:rut" element={<DirectorFichaAlumno />} />
+            <Route path="/panel/profesor/ficha-docente" element={<DirectorFichaDocente />} />
           </Route>
         </Route>
 

@@ -173,8 +173,12 @@ export default function TopHeader({
            navigate(`/panel/director/alumnos/${result.rut}`); 
          }
       } else {
-         // Para profesores (y otros) que no tienen una ficha separada aún
-         navigate(`/panel/${userRoleStr}/perfil-usuario/${result.rut}`);
+         // Para profesores (y otros roles)
+         if (uRol.includes('profesor') || uRol.includes('docente')) {
+           navigate(`/panel/${userRoleStr}/ficha-docente`, { state: { docenteSeleccionado: { id: result.rut } } });
+         } else {
+           navigate(`/panel/${userRoleStr}/perfil-usuario/${result.rut}`);
+         }
       }
     }
   };

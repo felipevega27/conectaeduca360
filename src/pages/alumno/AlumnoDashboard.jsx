@@ -44,7 +44,7 @@ export default function AlumnoDashboard() {
   ]);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       
       {/* CABECERA PERSONALIZADA PARA EL ESTUDIANTE */}
       <div className="mb-8">

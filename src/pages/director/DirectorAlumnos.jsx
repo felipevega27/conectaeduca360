@@ -267,10 +267,10 @@ export default function DirectorAlumnos() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8">
+    <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       
       {/* CABECERA */}
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Directorio General de Alumnos</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Administración de matrículas, cursos y Fichas de Alumnos.</p>
