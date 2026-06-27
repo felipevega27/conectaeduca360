@@ -143,7 +143,7 @@ export default function TopHeader({
       const filteredMenus = menuItems.filter(m => {
         const matchesLabel = m.label.toLowerCase().includes(lowerQuery);
         // Mostrar menús relevantes al rol
-        return matchesLabel && (m.role === userRole || userRole === 'director' || userRole === 'administrador');
+        return matchesLabel && m.role === userRole;
       });
 
       setSearchResults({ users: filteredUsers, menus: filteredMenus });
@@ -165,9 +165,11 @@ export default function TopHeader({
       if (userRoleStr === 'director' || userRoleStr === 'administrador') {
          if (uRol.includes('profesor') || uRol.includes('docente')) {
            navigate('/panel/director/ficha-docente', { state: { docenteSeleccionado: { id: result.rut } } });
+         } else if (uRol.includes('apoderado')) {
+           navigate(`/panel/director/apoderado/${result.rut}`); 
          } else {
-           // Si es alumno, apoderado, o si el rol tiene errores de tipeo en BD:
-           // Enviamos por defecto a la ficha del alumno, que consultará todo el expediente.
+           // Si es alumno, o si el rol tiene errores de tipeo en BD:
+           // Enviamos por defecto a la ficha del alumno.
            navigate(`/panel/director/alumnos/${result.rut}`); 
          }
       } else {
@@ -234,7 +236,10 @@ export default function TopHeader({
                       {searchResults.menus.map(menu => (
                         <li 
                           key={menu.id}
-                          onClick={() => handleSelectResult(menu, 'menu')}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectResult(menu, 'menu');
+                          }}
                           className="px-4 py-2 hover:bg-[#eef2ff] dark:hover:bg-gray-700 cursor-pointer flex items-center justify-between transition-colors"
                         >
                           <span className="text-[14px] font-medium text-gray-700 dark:text-gray-200 ml-1">
@@ -289,7 +294,10 @@ export default function TopHeader({
                         {usuariosDeGrupo.map(u => (
                           <li 
                             key={u.rut}
-                            onClick={() => handleSelectResult(u, 'user')}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleSelectResult(u, 'user');
+                            }}
                             className="px-4 py-2 hover:bg-[#eef2ff] dark:hover:bg-gray-700/80 cursor-pointer flex items-center justify-between transition-colors group"
                           >
                             <div className="flex items-center gap-3">

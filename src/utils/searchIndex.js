@@ -1,10 +1,17 @@
 export const menuItems = [
-  // Módulos Director
-  { id: 'dir-dashboard', label: 'Panel Principal (Director)', route: '/panel/director', role: 'director', icon: 'home' },
-  { id: 'dir-documentos', label: 'Gestión de Documentos', route: '/panel/director/documentos', role: 'director', icon: 'document' },
-  { id: 'dir-comunicados', label: 'Comunicados Oficiales', route: '/panel/director/comunicados', role: 'director', icon: 'megaphone' },
-  { id: 'dir-matriculas', label: 'Matrículas', route: '/panel/director/matriculas', role: 'director', icon: 'users' },
-  { id: 'dir-certificados', label: 'Certificados', route: '/panel/director/certificados', role: 'director', icon: 'academic-cap' },
+  // Módulos Director (Coincide con DirectorLayout)
+  { id: 'dir-dashboard', label: 'Visión General', route: '/panel/director', role: 'director', icon: 'home' },
+  { id: 'dir-cursos', label: 'Gestión de Cursos', route: '/panel/director/cursos', role: 'director', icon: 'academic-cap' },
+  { id: 'dir-docentes-lista', label: 'Lista Docente', route: '/panel/director/docentes', role: 'director', icon: 'users' },
+  { id: 'dir-docentes-nuevo', label: 'Registrar Docente', route: '/panel/director/docentes/nuevo', role: 'director', icon: 'user-add' },
+  { id: 'dir-alumnos-lista', label: 'Lista Alumno', route: '/panel/director/alumnos', role: 'director', icon: 'users' },
+  { id: 'dir-alumnos-nuevo', label: 'Matricular Alumno', route: '/panel/director/alumnos/crear', role: 'director', icon: 'user-add' },
+  { id: 'dir-rendimiento', label: 'Rendimiento', route: '/panel/director/rendimiento', role: 'director', icon: 'chart-bar' },
+  { id: 'dir-convivencia', label: 'Convivencia', route: '/panel/director/convivencia', role: 'director', icon: 'heart' },
+  { id: 'dir-utp', label: 'Gestión UTP', route: '/panel/director/utp', role: 'director', icon: 'clipboard' },
+  { id: 'dir-pie', label: 'Programa PIE', route: '/panel/director/programa-pie', role: 'director', icon: 'puzzle' },
+  { id: 'dir-documentos', label: 'Emisión Documentos', route: '/panel/director/documentos', role: 'director', icon: 'document' },
+  { id: 'dir-configuracion', label: 'Config. Institucional', route: '/panel/director/configuracion', role: 'director', icon: 'cog' },
 
   // Módulos Profesor
   { id: 'prof-dashboard', label: 'Mi Horario', route: '/panel/profesor', role: 'profesor', icon: 'calendar' },

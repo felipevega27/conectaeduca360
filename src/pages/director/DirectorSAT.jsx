@@ -193,10 +193,10 @@ export default function DirectorSAT() {
                 <tr>
                   <td colSpan="4" className="p-0">
                     <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                      <SkeletonRow />
-                      <SkeletonRow />
-                      <SkeletonRow />
-                      <SkeletonRow />
+                      <tr><td colSpan="12"><SkeletonRow /></td></tr>
+                      <tr><td colSpan="12"><SkeletonRow /></td></tr>
+                      <tr><td colSpan="12"><SkeletonRow /></td></tr>
+                      <tr><td colSpan="12"><SkeletonRow /></td></tr>
                     </div>
                   </td>
                 </tr>

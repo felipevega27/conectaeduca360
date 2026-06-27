@@ -285,7 +285,7 @@ export default function DirectorAlumnos() {
           </button>
           <button 
             onClick={() => navigate('/panel/director/alumnos/crear')}
-            className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all hover:-translate-y-0.5"
+            className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all hover:-translate-y-0.5 whitespace-nowrap"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
             Matricular Alumno Nuevo
@@ -340,11 +340,11 @@ export default function DirectorAlumnos() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {isLoading ? (
                 <>
-                  <SkeletonRow />
-                  <SkeletonRow />
-                  <SkeletonRow />
-                  <SkeletonRow />
-                  <SkeletonRow />
+                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
+                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
+                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
+                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
+                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
                 </>
               ) : currentItems.length > 0 ? (
                 currentItems.map((alumno) => (

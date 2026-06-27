@@ -6,6 +6,7 @@ import NotFound from './pages/NotFound';
 import DirectorDashboard from './pages/director/DirectorDashboard';
 import DirectorAlertasAsistencia from './pages/director/DirectorAlertasAsistencia';
 import DirectorFichaAlumno from './pages/director/DirectorFichaAlumno';
+import DirectorFichaApoderado from './pages/director/DirectorFichaApoderado';
 import DirectorDocentes from './pages/director/DirectorDocentes';
 import DirectorFichaDocente from './pages/director/DirectorFichaDocente';
 import DirectorRendimiento from './pages/director/DirectorRendimiento';
@@ -43,6 +44,9 @@ import MiPerfil from './pages/shared/MiPerfil';
 // Componentes de Seguridad
 import PrivateRoute from './components/PrivateRoute';
 
+// Componentes Globales
+import ScrollToTopButton from './components/ScrollToTopButton';
+
 // Layouts
 import DirectorLayout from './layouts/DirectorLayout';
 import ProfesorLayout from './layouts/ProfesorLayout';
@@ -52,6 +56,7 @@ import ApoderadoLayout from './layouts/ApoderadoLayout';
 function App() {
   return (
     <BrowserRouter>
+      <ScrollToTopButton />
       <Routes>
         <Route path="/" element={<Login />} />
 
@@ -87,8 +92,9 @@ function App() {
             {/* NUEVA RUTA PARA CREAR ALUMNO */}
             <Route path="/panel/director/alumnos/crear" element={<DirectorCrearAlumno />} />
 
-            {/* RUTA DINÁMICA PARA LA FICHA DEL ALUMNO */}
+            {/* RUTA DINÁMICA PARA LA FICHA DEL ALUMNO Y APODERADO */}
             <Route path="/panel/director/alumnos/:rut" element={<DirectorFichaAlumno />} />
+            <Route path="/panel/director/apoderado/:rut" element={<DirectorFichaApoderado />} />
 
             {/* NUEVA RUTA PARA EL PROGRAMA PIE */}
             <Route path="/panel/director/programa-pie" element={<DirectorProgramaPIE />} />

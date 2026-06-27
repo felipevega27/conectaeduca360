@@ -106,11 +106,11 @@ export function useRendimiento() {
         }
       } else {
         setChartDataLine({
-          labels: ['Ensayo Diagnóstico', 'Ensayo 1 (Mayo)', 'Ensayo 2 (Junio)'],
-          lectura: [580, 610, 650],
-          matematica: [510, 530, 580]
+          labels: [],
+          lectura: [],
+          matematica: []
         });
-        setMetricasPaes({ lectura: 650, matematica: 580 });
+        setMetricasPaes({ lectura: 0, matematica: 0 });
       }
 
       // 6. Cargar Configuración Institucional

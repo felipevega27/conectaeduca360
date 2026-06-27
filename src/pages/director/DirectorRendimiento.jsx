@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Chart from 'chart.js/auto';
 import { supabase } from '../../config/supabaseClient';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import logo from '../../assets/logo.png';
 import { initSchoolPdf, addPdfFooter } from '../../utils/pdfUtils';
 import { useRendimiento } from '../../hooks/useRendimiento';
@@ -104,43 +104,69 @@ export default function DirectorRendimiento() {
     );
 
     // 1. Contextualización y Resumen
-    let startY = 45;
-    doc.setTextColor(30, 41, 59);
-    doc.setFontSize(14);
+    let startY = doc.startY ? doc.startY + 10 : 55;
+    
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text(`1. Resumen de Rendimiento Académico Institucional - ${config?.nombre_colegio || 'Colegio ConectaEduc'}`, 14, startY);
+    doc.text(`1. Resumen de Rendimiento Académico Institucional`, 14, startY);
+    
+    // Decorative line
+    startY += 3;
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(14, startY, 196, startY);
 
     startY += 8;
-    doc.setFontSize(11);
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
     doc.setFont("helvetica", "normal");
     const textoContexto = "El presente documento detalla el estado actual del rendimiento académico del establecimiento, evidenciando el progreso de los estudiantes y focalizando las áreas que requieren apoyo pedagógico continuo según las orientaciones emanadas del Decreto 67 de Evaluación y Promoción.";
     const splitContexto = doc.splitTextToSize(textoContexto, 180);
     doc.text(splitContexto, 14, startY);
     
-    startY += 15;
+    startY += 18;
+    // Cajas de KPIs
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(14, startY, 85, 22, 3, 3, 'FD');
+    doc.roundedRect(105, startY, 91, 22, 3, 3, 'FD');
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Promedio General del Establecimiento", 18, startY + 8);
+    doc.text("Asignaturas en Riesgo Pedagógico", 109, startY + 8);
+    
+    doc.setFontSize(16);
+    doc.setTextColor(15, 23, 42);
     doc.setFont("helvetica", "bold");
-    doc.text(`Promedio General del Establecimiento: ${promedioGeneral}`, 14, startY);
-    doc.text(`Cantidad de Asignaturas en Riesgo Pedagógico: ${cursosEnRiesgo.length}`, 14, startY + 6);
+    doc.text(`${promedioGeneral}`, 18, startY + 18);
+    doc.text(`${cursosEnRiesgo.length}`, 109, startY + 18);
 
     // 2. Alertas Mineduc (Decreto 67)
-    startY += 20;
+    startY += 35;
     doc.setFontSize(14);
+    doc.setTextColor(15, 23, 42);
     doc.text("2. Alertas de Riesgo de Repitencia (>30% Reprobación)", 14, startY);
+    
+    startY += 3;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, startY, 196, startY);
 
-    startY += 8;
+    startY += 6;
     if (cursosEnRiesgo.length > 0) {
       const tableData = cursosEnRiesgo.map(c => [c.curso, c.asignatura, c.profesor, c.reprobacion, c.estado]);
       autoTable(doc, {
         startY: startY,
         head: [['Curso', 'Asignatura', 'Docente', '% Reprob.', 'Nivel de Alerta']],
         body: tableData,
-        theme: 'grid',
+        theme: 'striped',
         headStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold', halign: 'center' },
         columnStyles: {
           3: { halign: 'center', fontStyle: 'bold' },
           4: { halign: 'center', fontStyle: 'bold', textColor: [220, 38, 38] }
         },
-        styles: { fontSize: 10, cellPadding: 4 },
+        styles: { fontSize: 9, cellPadding: 5, textColor: [51, 65, 85] },
         alternateRowStyles: { fillColor: [254, 242, 242] }
       });
       startY = doc.lastAutoTable.finalY + 18;
@@ -156,12 +182,19 @@ export default function DirectorRendimiento() {
     // 3. Resultados Promedios por Asignatura
     if (chartDataBar.labels.length > 0) {
       doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42);
       doc.setFont("helvetica", "bold");
       doc.text("3. Promedios Generales por Asignatura", 14, startY);
       
-      const asigData = chartDataBar.labels.map((label, i) => [label, chartDataBar.data[i]]);
+      startY += 3;
+      doc.setDrawColor(226, 232, 240);
+      doc.line(14, startY, 196, startY);
+      
+      startY += 6;
+      
+      const asigData = chartDataBar.labels.map((lbl, idx) => [lbl, chartDataBar.data[idx]]);
       autoTable(doc, {
-        startY: startY + 6,
+        startY: startY,
         head: [['Asignatura', 'Promedio Institucional']],
         body: asigData,
         theme: 'striped',
@@ -178,38 +211,53 @@ export default function DirectorRendimiento() {
     // 4. Monitoreo PAES
     if (startY > 230) {
       doc.addPage();
-      startY = 25;
+      startY = doc.startY ? doc.startY + 10 : 30;
     }
 
     doc.setFontSize(14);
+    doc.setTextColor(15, 23, 42);
     doc.setFont("helvetica", "bold");
     doc.text("4. Monitoreo de Ensayos PAES (4to Medio)", 14, startY);
-
-    startY += 8;
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    doc.text("El último ensayo estandarizado PAES registrado arrojó los siguientes resultados globales:", 14, startY);
     
-    startY += 10;
+    startY += 3;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, startY, 196, startY);
+    
+    startY += 8;
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.setFont("helvetica", "normal");
+    
+    if (metricasPaes.lectura === 0 && metricasPaes.matematica === 0) {
+      doc.text("No se registran ensayos PAES en la base de datos.", 14, startY);
+      startY += 10;
+    } else {
+      doc.text("El último ensayo estandarizado PAES registrado arrojó los siguientes resultados globales:", 14, startY);
+      startY += 10;
+    }
     
     // Cajas visuales para PAES
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(14, startY, 85, 20, 2, 2, 'FD');
-    doc.roundedRect(105, startY, 85, 20, 2, 2, 'FD');
+    if (metricasPaes.lectura !== 0 || metricasPaes.matematica !== 0) {
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(14, startY, 85, 22, 3, 3, 'FD');
+      doc.roundedRect(105, startY, 91, 22, 3, 3, 'FD');
 
-    doc.setFontSize(10);
-    doc.setTextColor(1, 6, 148);
-    doc.setFont("helvetica", "bold");
-    doc.text("Comprensión Lectora", 18, startY + 7);
-    doc.setFontSize(16);
-    doc.text(`${metricasPaes.lectura} pts`, 18, startY + 16);
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.setFont("helvetica", "bold");
+      doc.text("Comprensión Lectora", 18, startY + 8);
+      doc.setFontSize(18);
+      doc.setTextColor(79, 70, 229); // indigo-600
+      doc.text(`${metricasPaes.lectura} pts`, 18, startY + 18);
 
-    doc.setFontSize(10);
-    doc.setTextColor(109, 112, 252);
-    doc.text("Competencia Matemática", 109, startY + 7);
-    doc.setFontSize(16);
-    doc.text(`${metricasPaes.matematica} pts`, 109, startY + 16);
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Competencia Matemática", 109, startY + 8);
+      doc.setFontSize(18);
+      doc.setTextColor(14, 165, 233); // sky-500
+      doc.text(`${metricasPaes.matematica} pts`, 109, startY + 18);
+    }
 
     // Footer Oficial
     addPdfFooter(doc, `Documento oficial generado por la Unidad Técnico Pedagógica (UTP) - Sistema ${config?.nombre_colegio || 'Colegio ConectaEduc'}`);
@@ -228,7 +276,7 @@ export default function DirectorRendimiento() {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Rendimiento Académico</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Análisis global de calificaciones y ensayos (SIMCE/PAES).</p>
         </div>
-        <button onClick={generarInformeUTP} className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm">
+        <button onClick={generarInformeUTP} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all hover:-translate-y-0.5 whitespace-nowrap">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
           Descargar Informe UTP
         </button>
