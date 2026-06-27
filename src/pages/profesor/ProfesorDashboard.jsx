@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
+import toast, { Toaster } from 'react-hot-toast';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export default function ProfesorDashboard() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
   const [profesorJefe, setProfesorJefe] = useState({
+    idCurso: null,
     curso: 'Sin Jefatura',
     alumnosRiesgo: 0,
-    justificacionesPendientes: 0,
     avancePlanificacion: 0
   });
 
@@ -19,6 +22,13 @@ export default function ProfesorDashboard() {
   // Estados para el Modal de Jefatura
   const [isModalJefaturaOpen, setIsModalJefaturaOpen] = useState(false);
   const [alumnosJefatura, setAlumnosJefatura] = useState([]);
+
+  // Estados para Muro de Anuncios (Blog)
+  const [misCursos, setMisCursos] = useState([]);
+  const [anuncios, setAnuncios] = useState([]);
+  const [nuevoAnuncio, setNuevoAnuncio] = useState({ titulo: '', contenido: '', id_curso: '' });
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   // Obtener el día de la semana actual en español
   const getDiaHoy = () => {
@@ -51,9 +61,10 @@ export default function ProfesorDashboard() {
         const alumnosRiesgoSet = new Set(asistencias?.map(a => a.rut_alumno) || []);
         
         setProfesorJefe({
+          idCurso: cursoJefatura.id,
           curso: cursoJefatura.nombre,
           alumnosRiesgo: alumnosRiesgoSet.size,
-          justificacionesPendientes: 0 // TODO: Conectar con justificaciones reales a futuro
+          avancePlanificacion: 0
         });
 
         // Cargar alumnos de jefatura
@@ -145,6 +156,35 @@ export default function ProfesorDashboard() {
       } else {
         setClasesHoy([]);
       }
+
+      // 3. Obtener Cursos donde el profesor hace clases (para el Muro de Anuncios)
+      const { data: asignaturasData } = await supabase
+        .from('asignaturas')
+        .select('id_curso, cursos(nombre)')
+        .eq('rut_profesor', rutProfesor);
+      
+      if (asignaturasData) {
+        const uniqueCursosMap = new Map();
+        asignaturasData.forEach(asig => {
+          if (asig.cursos) {
+            uniqueCursosMap.set(asig.id_curso, asig.cursos.nombre);
+          }
+        });
+        const cursosList = Array.from(uniqueCursosMap, ([id, nombre]) => ({ id, nombre }));
+        setMisCursos(cursosList);
+      }
+
+      // 4. Cargar Anuncios del Profesor
+      const { data: anunciosData } = await supabase
+        .from('anuncios_curso')
+        .select('*, cursos(nombre)')
+        .eq('rut_profesor', rutProfesor)
+        .order('fecha_creacion', { ascending: false });
+      
+      if (anunciosData) {
+        setAnuncios(anunciosData);
+      }
+
     } catch (error) {
       console.error('Error cargando dashboard del profesor:', error);
     } finally {
@@ -152,8 +192,220 @@ export default function ProfesorDashboard() {
     }
   };
 
+  const generarReporteAsistenciaPDF = async () => {
+    if (!profesorJefe.idCurso) return;
+    
+    const toastId = toast.loading('Generando reporte de asistencia...');
+    try {
+      // 1. Traer todos los alumnos (perfiles + matriculas)
+      const { data: matriculas } = await supabase
+        .from('matriculas')
+        .select('rut_alumno, perfiles(nombre)')
+        .eq('id_curso', profesorJefe.idCurso);
+        
+      if (!matriculas || matriculas.length === 0) {
+        toast.error('No hay alumnos matriculados.', { id: toastId });
+        return;
+      }
+      
+      // 2. Traer TODA la asistencia de este curso
+      const { data: asistencias } = await supabase
+        .from('asistencia_alumnos')
+        .select('rut_alumno, estado')
+        .eq('id_curso', profesorJefe.idCurso);
+        
+      // 3. Procesar datos (contar Presente, Ausente, Atrasado por alumno)
+      const resumenAsistencia = {};
+      matriculas.forEach(m => {
+        resumenAsistencia[m.rut_alumno] = {
+          nombre: m.perfiles?.nombre || 'Desconocido',
+          presente: 0,
+          ausente: 0,
+          atrasado: 0
+        };
+      });
+      
+      asistencias?.forEach(asis => {
+        if (resumenAsistencia[asis.rut_alumno]) {
+          const est = asis.estado.toLowerCase();
+          if (est === 'presente') resumenAsistencia[asis.rut_alumno].presente++;
+          else if (est === 'ausente') resumenAsistencia[asis.rut_alumno].ausente++;
+          else if (est === 'atrasado') resumenAsistencia[asis.rut_alumno].atrasado++;
+        }
+      });
+      
+      // Convertir a array y ordenar alfabéticamente
+      const rows = Object.values(resumenAsistencia).sort((a, b) => a.nombre.localeCompare(b.nombre));
+      const bodyData = rows.map(r => [
+        r.nombre, 
+        r.presente.toString(), 
+        r.ausente.toString(), 
+        r.atrasado.toString(),
+        `${r.presente + r.ausente + r.atrasado} clases`
+      ]);
+
+      // 4. Generar el PDF
+      const doc = new jsPDF();
+      
+      // Títulos
+      doc.setFontSize(16);
+      doc.text(`Reporte de Asistencia: ${profesorJefe.curso}`, 14, 20);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generado el: ${new Date().toLocaleDateString('es-CL')} por ${user?.nombre || 'Profesor'}`, 14, 28);
+      
+      // AVISO INTERNO
+      doc.setFontSize(9);
+      doc.setTextColor(220, 38, 38); // Rojo
+      doc.text("DOCUMENTO DE USO INTERNO E INFORMATIVO PARA REUNIONES DE APODERADOS.", 14, 38);
+      doc.text("ESTE DOCUMENTO NO CONSTITUYE UN CERTIFICADO OFICIAL DE INASISTENCIA.", 14, 43);
+
+      doc.autoTable({
+        startY: 50,
+        head: [['Estudiante', 'Presentes', 'Ausentes', 'Atrasados', 'Total Clases Registradas']],
+        body: bodyData,
+        theme: 'striped',
+        headStyles: { fillColor: [37, 99, 235] },
+        styles: { fontSize: 9 }
+      });
+      
+      doc.save(`Reporte_Asistencia_${profesorJefe.curso.replace(/ /g, '_')}.pdf`);
+      toast.success('Reporte generado exitosamente.', { id: toastId });
+      
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al generar reporte.', { id: toastId });
+    }
+  };
+
+  const redactarConIA = async () => {
+    if (!nuevoAnuncio.titulo || !nuevoAnuncio.id_curso) {
+      toast.error('Ingresa un título y selecciona un curso primero.');
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    const toastId = toast.loading('Redactando con IA...');
+
+    try {
+      let evaluacionesContexto = '';
+      const { data: asignaturas } = await supabase
+        .from('asignaturas')
+        .select('id, nombre')
+        .eq('rut_profesor', user.rut)
+        .eq('id_curso', nuevoAnuncio.id_curso);
+        
+      if (asignaturas && asignaturas.length > 0) {
+        const asigIds = asignaturas.map(a => a.id);
+        const { data: evals } = await supabase
+          .from('evaluaciones')
+          .select('nombre, fecha')
+          .in('id_asignatura', asigIds)
+          .gte('fecha', new Date().toISOString()) // Solo futuras
+          .order('fecha', { ascending: true })
+          .limit(4);
+
+        if (evals && evals.length > 0) {
+          evaluacionesContexto = 'Próximas evaluaciones del curso (usa esto si es útil para el aviso):\n' + 
+            evals.map(e => `- ${e.nombre} (Fecha: ${new Date(e.fecha).toLocaleDateString('es-CL')})`).join('\n');
+        }
+      }
+
+      const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+      if (!apiKey) throw new Error("No hay API Key configurada para IA.");
+
+      const promptIA = `Eres un asistente pedagógico para profesores.
+      Debes redactar un mensaje o recordatorio breve, claro y amable para un "Muro Virtual" que verán los estudiantes y apoderados.
+      
+      Título o tema del aviso dado por el profesor: "${nuevoAnuncio.titulo}"
+      
+      ${evaluacionesContexto}
+      
+      Instrucciones:
+      - Escribe solo el cuerpo del mensaje (no incluyas el título ni saludos genéricos muy formales).
+      - Mantén un tono motivador y empático.
+      - Evita usar terminología técnica excesiva.
+      - Sé directo, no uses más de 2 o 3 párrafos cortos.
+      - No respondas con "Aquí tienes el mensaje" ni similar, responde SOLO con el contenido redactado.`;
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant", 
+          messages: [{ role: "user", content: promptIA }]
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || "Error al generar texto");
+      
+      const textoGenerado = data.choices[0].message.content.trim();
+      setNuevoAnuncio(prev => ({ ...prev, contenido: textoGenerado }));
+      toast.success('Mensaje generado', { id: toastId });
+
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al generar con IA: ' + error.message, { id: toastId });
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const handlePublicarAnuncio = async (e) => {
+    e.preventDefault();
+    if (!nuevoAnuncio.titulo || !nuevoAnuncio.contenido || !nuevoAnuncio.id_curso) {
+      toast.error('Completa todos los campos del anuncio (título, contenido y curso).');
+      return;
+    }
+    setIsPublishing(true);
+    const toastId = toast.loading('Publicando anuncio...');
+    try {
+      const { data, error } = await supabase
+        .from('anuncios_curso')
+        .insert([{
+          rut_profesor: user.rut,
+          id_curso: parseInt(nuevoAnuncio.id_curso),
+          titulo: nuevoAnuncio.titulo,
+          contenido: nuevoAnuncio.contenido
+        }])
+        .select('*, cursos(nombre)');
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setAnuncios([data[0], ...anuncios]);
+        setNuevoAnuncio({ titulo: '', contenido: '', id_curso: '' });
+        toast.success('Anuncio publicado con éxito', { id: toastId });
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Error al publicar anuncio', { id: toastId });
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleEliminarAnuncio = async (id) => {
+    if (!window.confirm('¿Eliminar este anuncio permanentemente?')) return;
+    try {
+      const { error } = await supabase.from('anuncios_curso').delete().eq('id', id);
+      if (error) throw error;
+      setAnuncios(anuncios.filter(a => a.id !== id));
+      toast.success('Anuncio eliminado');
+    } catch (err) {
+      console.error(err);
+      toast.error('Error al eliminar anuncio');
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
+      <Toaster position="top-right" />
       
       {/* CABECERA DINÁMICA */}
       <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -192,7 +444,7 @@ export default function ProfesorDashboard() {
       )}
 
       {/* RECUADROS DE RESUMEN OPERATIVO */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         
         {/* Tu Jefatura */}
         <div 
@@ -215,12 +467,7 @@ export default function ProfesorDashboard() {
           </div>
         </div>
 
-        {/* Justificaciones */}
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
-          <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Inasistencias por Justificar</p>
-          <h3 className="text-2xl font-bold tracking-tight text-gray-800 dark:text-white mt-1">{profesorJefe.justificacionesPendientes}</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">Apoderados enviaron certificados médicos en la app.</p>
-        </div>
+
 
         {/* Cobertura Curricular Personal */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg flex flex-col justify-between">
@@ -315,6 +562,126 @@ export default function ProfesorDashboard() {
         </div>
       </div>
 
+      {/* MURO DE RECORDATORIOS (BLOG) */}
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Columna Izquierda: Formulario de Nuevo Anuncio */}
+        <div className="lg:col-span-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
+            <h2 className="text-base font-bold text-gray-800 dark:text-white flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg>
+              Publicar Aviso
+            </h2>
+          </div>
+          <form onSubmit={handlePublicarAnuncio} className="p-5 flex flex-col gap-4 flex-1">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Destinatario (Curso)</label>
+              <select 
+                value={nuevoAnuncio.id_curso}
+                onChange={(e) => setNuevoAnuncio({...nuevoAnuncio, id_curso: e.target.value})}
+                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-medium text-gray-800 dark:text-white"
+              >
+                <option value="">Selecciona un curso...</option>
+                {misCursos.map(c => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Título del Aviso</label>
+              <input 
+                type="text" 
+                maxLength={100}
+                placeholder="Ej. Material para la próxima clase..."
+                value={nuevoAnuncio.titulo}
+                onChange={(e) => setNuevoAnuncio({...nuevoAnuncio, titulo: e.target.value})}
+                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-medium text-gray-800 dark:text-white"
+              />
+            </div>
+            <div className="flex-1 flex flex-col">
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">Mensaje</label>
+                <button 
+                  type="button"
+                  onClick={redactarConIA}
+                  disabled={isGeneratingAI}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center gap-1 disabled:opacity-50"
+                  title="Usa IA para escribir un mensaje basado en el título"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  {isGeneratingAI ? 'Generando...' : 'Redactar con IA'}
+                </button>
+              </div>
+              <textarea 
+                rows="4"
+                placeholder="Escribe aquí las instrucciones o recordatorios..."
+                value={nuevoAnuncio.contenido}
+                onChange={(e) => setNuevoAnuncio({...nuevoAnuncio, contenido: e.target.value})}
+                className="w-full flex-1 min-h-[100px] px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none font-medium text-gray-800 dark:text-white"
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={isPublishing}
+              className="mt-2 w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all shadow-[0_2px_10px_-3px_rgba(79,70,229,0.5)] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isPublishing ? 'Publicando...' : 'Publicar Anuncio'}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+            </button>
+          </form>
+        </div>
+
+        {/* Columna Derecha: Feed de Anuncios */}
+        <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-[500px]">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 flex items-center justify-between">
+            <h2 className="text-base font-bold text-gray-800 dark:text-white flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Tus Avisos y Recordatorios
+            </h2>
+            <span className="text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2.5 py-1 rounded-lg font-bold">{anuncios.length} publicados</span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-gray-50/30 dark:bg-gray-900/20">
+            {anuncios.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 dark:text-gray-500 gap-3">
+                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
+                <p className="text-sm font-medium max-w-sm">Aún no has publicado ningún aviso.<br/>Usa el formulario para enviar mensajes a tus cursos.</p>
+              </div>
+            ) : (
+              anuncios.map(anuncio => {
+                const date = new Date(anuncio.fecha_creacion);
+                const fechaFormateada = date.toLocaleString('es-CL', { day: '2-digit', month: 'long', hour: '2-digit', minute:'2-digit' });
+                return (
+                  <div key={anuncio.id} className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow group">
+                    <button 
+                      onClick={() => handleEliminarAnuncio(anuncio.id)}
+                      className="absolute top-4 right-4 text-gray-400 hover:text-red-500 bg-gray-50 dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900/30 w-8 h-8 rounded-full flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100"
+                      title="Eliminar aviso"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                    <div className="flex items-center gap-3 mb-3 pr-10">
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center border border-indigo-200 dark:border-indigo-800 shrink-0">
+                        <span className="text-indigo-600 dark:text-indigo-400 font-black text-sm">
+                          {anuncio.cursos?.nombre?.substring(0,2).toUpperCase() || 'CU'}
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-gray-800 dark:text-white leading-tight">{anuncio.titulo}</h4>
+                        <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mt-0.5">Para: {anuncio.cursos?.nombre} <span className="text-gray-400 dark:text-gray-500 font-normal ml-1">• {fechaFormateada}</span></p>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-300 font-medium whitespace-pre-wrap leading-relaxed bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
+                      {anuncio.contenido}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* MODAL ALUMNOS DE JEFATURA */}
       {isModalJefaturaOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -353,7 +720,14 @@ export default function ProfesorDashboard() {
               </div>
             </div>
             
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-right">
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex justify-between items-center">
+              <button 
+                onClick={generarReporteAsistenciaPDF}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg shadow-sm transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                Exportar Reporte (PDF)
+              </button>
               <button 
                 onClick={() => setIsModalJefaturaOpen(false)}
                 className="px-6 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-bold text-sm rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"

@@ -317,14 +317,17 @@ export default function ProfesorCalificaciones() {
                       </td>
                     );
                   })}
-                  <td className="p-4 text-center align-middle sticky right-0 bg-white dark:bg-gray-800 border-l-2 border-gray-200 dark:border-gray-700 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 group-hover:bg-blue-50/20 dark:group-hover:bg-gray-700/50 transition-colors">
+                  <td className="p-4 text-center align-middle sticky right-0 bg-white dark:bg-gray-800 border-l-2 border-gray-200 dark:border-gray-700 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)] z-10 hover:z-[60] group-hover:bg-blue-50/20 dark:group-hover:bg-gray-700/50 transition-colors">
                     <div className="group/promedio relative inline-flex items-center justify-center cursor-help">
                       <span className={`font-black text-xl px-4 py-1.5 rounded-xl border-2 shadow-sm transition-all duration-300
                         ${promedioStr === '-' ? 'text-gray-400 bg-gray-50 border-gray-100 dark:bg-gray-800/50 dark:border-gray-700' : parseFloat(promedioStr) < 4.0 ? 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800/50' : 'text-indigo-700 bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-800/50'}
                       `}>
                         {promedioStr}
                       </span>
-                      <div className="absolute bottom-full right-0 mb-3 w-48 rounded-xl bg-gray-900 dark:bg-white p-3 shadow-xl opacity-0 invisible group-hover/promedio:opacity-100 group-hover/promedio:visible transition-all duration-200 z-[9999] text-left pointer-events-none transform translate-y-2 group-hover/promedio:translate-y-0">
+                      {/* TOOLTIP RESTAURADO - AHORA A LA IZQUIERDA */}
+                      <div className="absolute right-full top-1/2 -translate-y-1/2 mr-4 w-48 rounded-xl bg-gray-900 dark:bg-white p-3 shadow-xl opacity-0 invisible group-hover/promedio:opacity-100 group-hover/promedio:visible transition-all duration-200 z-[9999] text-left pointer-events-none transform translate-x-2 group-hover/promedio:translate-x-0">
+                        {/* Triangulito indicador a la derecha */}
+                        <div className="absolute top-1/2 -translate-y-1/2 -right-1.5 w-3 h-3 bg-gray-900 dark:bg-white transform rotate-45"></div>
                         <strong className="block text-white dark:text-gray-900 mb-1 text-[11px] uppercase tracking-wider font-black">Promedio Semestral</strong>
                         <p className="text-gray-300 dark:text-gray-600 font-medium text-[11px] leading-relaxed">Promedio final ponderado del alumno en este semestre.</p>
                       </div>

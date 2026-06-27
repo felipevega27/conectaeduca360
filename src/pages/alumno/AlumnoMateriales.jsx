@@ -1,31 +1,120 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import BackdropLoader from '../../components/BackdropLoader';
+import { supabase } from '../../config/supabaseClient';
 
 export default function AlumnoMateriales() {
-  // Filtro de asignaturas
   const [asignaturaActiva, setAsignaturaActiva] = useState('Todas');
-  
-  // Estados para la ventana de entrega de tareas
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [comentario, setComentario] = useState('');
 
-  const asignaturas = ['Todas', 'Lenguaje', 'Matemáticas', 'Biología', 'Historia'];
+  const [asignaturas, setAsignaturas] = useState(['Todas']);
+  const [materiales, setMateriales] = useState([]);
+  const [tareas, setTareas] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Base de datos simulada de Materiales de Estudio (Descargas)
-  const [materiales] = useState([
-    { id: 1, asignatura: 'Matemáticas', titulo: 'Guía de Ecuaciones Cuadráticas', tipo: 'PDF', tamaño: '1.2 MB', fecha: 'Ayer' },
-    { id: 2, asignatura: 'Lenguaje', titulo: 'Presentación: El Boom Latinoamericano', tipo: 'PPT', tamaño: '4.5 MB', fecha: 'Hace 2 días' },
-    { id: 3, asignatura: 'Historia', titulo: 'Resumen Unidad 1: Chile en el S. XX', tipo: 'PDF', tamaño: '2.1 MB', fecha: 'Semana pasada' },
-    { id: 4, asignatura: 'Biología', titulo: 'Esquema de Célula Eucarionte', tipo: 'IMG', tamaño: '800 KB', fecha: 'Semana pasada' },
-  ]);
+  useEffect(() => {
+    const loggedUserJSON = localStorage.getItem('userLogged');
+    if (loggedUserJSON) {
+      const user = JSON.parse(loggedUserJSON);
+      cargarAulaVirtual(user.rut);
+    }
+  }, []);
 
-  // Base de datos simulada de Tareas (Entregas)
-  const [tareas] = useState([
-    { id: 101, asignatura: 'Lenguaje', titulo: 'Ensayo sobre Don Quijote', vence: 'Mañana, 23:59', estado: 'Pendiente', descripcion: 'Escribir un ensayo de 2 planas sobre la locura del protagonista. Formato Word o PDF.' },
-    { id: 102, asignatura: 'Biología', titulo: 'Guía de Células Resuelta', vence: 'Viernes 18, 14:00', estado: 'Pendiente', descripcion: 'Subir fotografía clara de la guía desarrollada en clases.' },
-    { id: 103, asignatura: 'Matemáticas', titulo: 'Ejercicios Página 45', vence: 'Lunes 08', estado: 'Entregado', descripcion: 'Resolver los 10 ejercicios del libro.' },
-  ]);
+  const cargarAulaVirtual = async (rutAlumno) => {
+    setIsLoading(true);
+    try {
+      // 1. Obtener curso del alumno
+      const { data: matricula } = await supabase
+        .from('matriculas')
+        .select('id_curso')
+        .eq('rut_alumno', rutAlumno)
+        .maybeSingle();
+
+      if (!matricula) {
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Obtener tareas del curso
+      const { data: tareasData } = await supabase
+        .from('tareas')
+        .select(`
+          id, titulo, descripcion, fecha_entrega, archivo_url, estado,
+          asignaturas(nombre)
+        `)
+        .eq('id_curso', matricula.id_curso);
+
+      // 3. Obtener entregas del alumno
+      const { data: entregasData } = await supabase
+        .from('entregas_tareas')
+        .select('id_tarea, fecha_entrega, nota')
+        .eq('rut_alumno', rutAlumno);
+
+      const entregasMap = {};
+      entregasData?.forEach(e => {
+        entregasMap[e.id_tarea] = e;
+      });
+
+      if (tareasData) {
+        // Extraer asignaturas únicas
+        const asigsSet = new Set(tareasData.map(t => t.asignaturas?.nombre).filter(Boolean));
+        setAsignaturas(['Todas', ...Array.from(asigsSet)]);
+
+        // Formatear Tareas
+        const tareasFormateadas = tareasData.map(t => {
+          const entregado = !!entregasMap[t.id];
+          const fEntrega = new Date(t.fecha_entrega);
+          return {
+            id: t.id,
+            asignatura: t.asignaturas?.nombre || 'General',
+            titulo: t.titulo,
+            descripcion: t.descripcion,
+            vence: fEntrega.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' }),
+            estado: entregado ? 'Entregado' : 'Pendiente',
+            archivo_url: t.archivo_url
+          };
+        });
+        
+        // Ordenar: pendientes primero, luego por fecha de vencimiento
+        tareasFormateadas.sort((a, b) => {
+          if (a.estado === 'Pendiente' && b.estado === 'Entregado') return -1;
+          if (a.estado === 'Entregado' && b.estado === 'Pendiente') return 1;
+          return 0;
+        });
+
+        setTareas(tareasFormateadas);
+
+        // Formatear Materiales (Tareas que tengan archivo_url)
+        const mats = tareasData
+          .filter(t => t.archivo_url)
+          .map(t => {
+            const ext = t.archivo_url.split('.').pop().toUpperCase();
+            let tipo = 'FILE';
+            if (['PDF'].includes(ext)) tipo = 'PDF';
+            else if (['PPT', 'PPTX'].includes(ext)) tipo = 'PPT';
+            else if (['DOC', 'DOCX'].includes(ext)) tipo = 'DOC';
+            else if (['JPG', 'PNG', 'JPEG'].includes(ext)) tipo = 'IMG';
+
+            return {
+              id: t.id,
+              asignatura: t.asignaturas?.nombre || 'General',
+              titulo: t.titulo,
+              tipo: tipo,
+              tamaño: '1.2 MB', // Simulado por ahora
+              fecha: new Date(t.fecha_entrega).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' }),
+              archivo_url: t.archivo_url
+            };
+          });
+        setMateriales(mats);
+      }
+    } catch (error) {
+      console.error('Error cargando Aula Virtual:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filtrado de datos
   const materialesFiltrados = asignaturaActiva === 'Todas' ? materiales : materiales.filter(m => m.asignatura === asignaturaActiva);
@@ -36,16 +125,40 @@ export default function AlumnoMateriales() {
     setIsModalOpen(true);
   };
 
-  const handleSubirTarea = (e) => {
+  const handleSubirTarea = async (e) => {
     e.preventDefault();
     setIsUploading(true);
-    // Simulación de carga al servidor
-    setTimeout(() => {
-      setIsUploading(false);
-      setIsModalOpen(false);
+    
+    try {
+      const loggedUserJSON = localStorage.getItem('userLogged');
+      const user = JSON.parse(loggedUserJSON);
+
+      const { error } = await supabase
+        .from('entregas_tareas')
+        .insert({
+          id_tarea: tareaSeleccionada.id,
+          rut_alumno: user.rut,
+          archivo_url: 'https://ejemplo.com/archivo.pdf', // Simulado
+          comentario: comentario || null
+        });
+
+      if (error) throw error;
+      
       alert('¡Tarea enviada con éxito al profesor!');
-    }, 2000);
+      setIsModalOpen(false);
+      setComentario('');
+      cargarAulaVirtual(user.rut); // Recargar
+    } catch (err) {
+      console.error(err);
+      alert('Hubo un error al enviar la tarea.');
+    } finally {
+      setIsUploading(false);
+    }
   };
+
+  if (isLoading) {
+    return <div className="p-8 text-center text-gray-500">Cargando Aula Virtual...</div>;
+  }
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
@@ -141,7 +254,10 @@ export default function AlumnoMateriales() {
                   {/* Ícono dinámico según el tipo de archivo */}
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
                     item.tipo === 'PDF' ? 'bg-red-100 text-red-600 dark:bg-red-900/30' :
-                    item.tipo === 'PPT' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30'
+                    item.tipo === 'PPT' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30' : 
+                    item.tipo === 'DOC' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' :
+                    item.tipo === 'IMG' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' :
+                    'bg-gray-100 text-gray-600 dark:bg-gray-900/30'
                   }`}>
                     <span className="text-[10px] font-black">{item.tipo}</span>
                   </div>
@@ -151,13 +267,18 @@ export default function AlumnoMateriales() {
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                       <span>{item.asignatura}</span>
                       <span>•</span>
-                      <span>{item.tamaño}</span>
+                      <span>Subido el {item.fecha}</span>
                     </div>
                   </div>
 
-                  <button className="w-8 h-8 rounded-full bg-gray-50 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors shrink-0">
+                  <a 
+                    href={item.archivo_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="w-8 h-8 rounded-full bg-gray-50 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors shrink-0"
+                  >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                  </button>
+                  </a>
                 </div>
               ))}
               {materialesFiltrados.length === 0 && (
@@ -207,6 +328,8 @@ export default function AlumnoMateriales() {
                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Comentario para el profesor (Opcional)</label>
                 <textarea 
                   rows="2" 
+                  value={comentario}
+                  onChange={(e) => setComentario(e.target.value)}
                   className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
                   placeholder="Ej: Profesor, le envío el trabajo finalizado."
                 ></textarea>

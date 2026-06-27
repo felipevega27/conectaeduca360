@@ -1,16 +1,118 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../config/supabaseClient';
 
 export default function ApoderadoDashboard() {
-  const [pupiloActivo] = useState({ nombre: 'Martina Fernández', curso: '2do Medio B', asistencia: 94, promedio: 5.8 });
+  const [pupilos, setPupilos] = useState([]);
+  const [pupiloActivo, setPupiloActivo] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalJustificar, setIsModalJustificar] = useState(false);
 
-  // Bandeja de notificaciones y alertas en tiempo real
+  useEffect(() => {
+    const loggedUserJSON = localStorage.getItem('userLogged');
+    if (loggedUserJSON) {
+      const user = JSON.parse(loggedUserJSON);
+      cargarPupilos(user.rut);
+    }
+  }, []);
+
+  const cargarPupilos = async (rutApoderado) => {
+    setIsLoading(true);
+    try {
+      // Obtener las relaciones familiares del apoderado
+      const { data: relaciones } = await supabase
+        .from('relacion_apoderados')
+        .select('rut_alumno')
+        .eq('rut_apoderado', rutApoderado);
+
+      if (relaciones && relaciones.length > 0) {
+        const rutsPupilos = relaciones.map(r => r.rut_alumno);
+        
+        // Obtener datos de los perfiles y cursos
+        const { data: perfiles } = await supabase
+          .from('perfiles')
+          .select('rut, nombre, avatar_url')
+          .in('rut', rutsPupilos);
+
+        const { data: matriculas } = await supabase
+          .from('matriculas')
+          .select('rut_alumno, id_curso')
+          .in('rut_alumno', rutsPupilos);
+          
+        let idsCursos = [];
+        if (matriculas) idsCursos = matriculas.map(m => m.id_curso);
+
+        const { data: cursos } = await supabase
+          .from('cursos')
+          .select('id, nombre, nivel')
+          .in('id', idsCursos);
+
+        // Fetch de KPIs (Asistencia y Notas)
+        const pupilosCompletos = await Promise.all(perfiles.map(async (perfil) => {
+          const matricula = matriculas?.find(m => m.rut_alumno === perfil.rut);
+          const curso = cursos?.find(c => c.id === matricula?.id_curso);
+          const nombreCurso = curso ? `${curso.nivel} ${curso.nombre}` : 'Sin curso asignado';
+          
+          // Calcular Asistencia Real
+          const { data: asist } = await supabase
+            .from('asistencia_alumnos')
+            .select('estado')
+            .eq('rut_alumno', perfil.rut);
+            
+          let porcentajeAsistencia = 100;
+          if (asist && asist.length > 0) {
+            const presentes = asist.filter(a => a.estado.toLowerCase() === 'presente').length;
+            porcentajeAsistencia = Math.round((presentes / asist.length) * 100);
+          }
+
+          // Calcular Notas Reales
+          const { data: notas } = await supabase
+            .from('notas')
+            .select('nota')
+            .eq('rut_alumno', perfil.rut);
+            
+          let promedio = 0;
+          if (notas && notas.length > 0) {
+            const suma = notas.reduce((acc, curr) => acc + curr.nota, 0);
+            promedio = parseFloat((suma / notas.length).toFixed(1));
+          }
+
+          return {
+            rut: perfil.rut,
+            nombre: perfil.nombre,
+            iniciales: perfil.nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase(),
+            curso: nombreCurso,
+            asistencia: porcentajeAsistencia,
+            promedio: promedio > 0 ? promedio : 'Sin notas'
+          };
+        }));
+        
+        setPupilos(pupilosCompletos);
+        localStorage.setItem('apoderadoPupilos', JSON.stringify(pupilosCompletos));
+        if (pupilosCompletos.length > 0) {
+          setPupiloActivo(pupilosCompletos[0]);
+          localStorage.setItem('pupiloActivo', JSON.stringify(pupilosCompletos[0]));
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCambiarPupilo = (e) => {
+    const seleccionado = pupilos.find(p => p.rut === e.target.value);
+    setPupiloActivo(seleccionado);
+    localStorage.setItem('pupiloActivo', JSON.stringify(seleccionado));
+    // Disparamos evento para que las otras vistas sepan que cambió
+    window.dispatchEvent(new Event('pupiloChanged'));
+  };
+
+  // Bandeja de notificaciones y alertas simuladas por ahora
   const [notificaciones] = useState([
-    { id: 1, tipo: 'anotacion', urgente: true, titulo: 'Anotación Negativa Registrada', descripcion: 'Martina ha recibido una anotación en Convivencia Escolar por el uso indebido del celular en clases.', fecha: 'Hace 1 hora', leido: false },
-    { id: 2, tipo: 'reunion', urgente: true, titulo: 'Citación a Reunión de Apoderados', descripcion: 'Estimado apoderado, se le cita a reunión general presencial el día Jueves 18 a las 19:00 hrs en la Sala 12.', fecha: 'Hoy, 09:00 AM', leido: false },
-    { id: 3, tipo: 'nota_alerta', urgente: false, titulo: 'Nueva Calificación: Lenguaje', descripcion: 'Se ha ingresado una nueva nota: 3.8 (Control de Lectura Subterra).', fecha: 'Ayer', leido: true },
-    { id: 4, tipo: 'tarea', urgente: false, titulo: 'Recordatorio de Tarea', descripcion: 'Mañana vence la entrega del Ensayo de Lenguaje.', fecha: 'Ayer', leido: true },
-    { id: 5, tipo: 'asistencia', urgente: false, titulo: 'Inasistencia Registrada', descripcion: 'El sistema registró una inasistencia el día Martes 21 de Abril. Falta justificar.', fecha: '21 Abr', leido: true }
+    { id: 1, tipo: 'anotacion', urgente: true, titulo: 'Anotación Negativa Registrada', descripcion: 'El alumno ha recibido una anotación en Convivencia Escolar.', fecha: 'Hace 1 hora', leido: false },
+    { id: 2, tipo: 'reunion', urgente: true, titulo: 'Citación a Reunión de Apoderados', descripcion: 'Reunión general presencial el día Jueves 18 a las 19:00 hrs.', fecha: 'Hoy, 09:00 AM', leido: false },
+    { id: 3, tipo: 'nota_alerta', urgente: false, titulo: 'Nuevas Calificaciones', descripcion: 'Se han ingresado nuevas notas al sistema.', fecha: 'Ayer', leido: true },
   ]);
 
   const notificacionesNoLeidas = notificaciones.filter(n => !n.leido).length;
@@ -20,6 +122,20 @@ export default function ApoderadoDashboard() {
     alert('Certificado enviado a Inspectoría con éxito.');
     setIsModalJustificar(false);
   };
+
+  if (isLoading) {
+    return <div className="p-8 text-center text-gray-500">Cargando panel de apoderado...</div>;
+  }
+
+  if (!pupiloActivo) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm text-center">
+          <p className="text-gray-500">No tienes pupilos asignados a tu cuenta. Contacta a Inspectoría.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -31,14 +147,30 @@ export default function ApoderadoDashboard() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Supervisión académica y de convivencia de sus pupilos.</p>
         </div>
         
-        {/* Selector de Pupilo (Si tiene más de un hijo) */}
+        {/* Selector de Pupilo */}
         <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-2 pl-3 rounded-xl border border-gray-200 dark:border-gray-700">
-          <div className="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs">MF</div>
-          <div className="flex flex-col pr-8">
-            <span className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-none">{pupiloActivo.nombre}</span>
+          <div className="h-8 w-8 shrink-0 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs">
+            {pupiloActivo.iniciales}
+          </div>
+          <div className="flex flex-col flex-1 pr-2">
+            {pupilos.length > 1 ? (
+              <select 
+                value={pupiloActivo.rut} 
+                onChange={handleCambiarPupilo}
+                className="bg-transparent text-sm font-bold text-gray-800 dark:text-gray-200 leading-none outline-none cursor-pointer appearance-none"
+              >
+                {pupilos.map(p => (
+                  <option key={p.rut} value={p.rut} className="text-gray-800">{p.nombre}</option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-none">{pupiloActivo.nombre}</span>
+            )}
             <span className="text-[10px] text-gray-500 uppercase font-semibold mt-0.5">{pupiloActivo.curso}</span>
           </div>
-          <svg className="w-5 h-5 text-gray-400 mr-2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+          {pupilos.length > 1 && (
+            <svg className="w-5 h-5 text-gray-400 pointer-events-none mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+          )}
         </div>
       </div>
 
@@ -110,15 +242,13 @@ export default function ApoderadoDashboard() {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Promedio General</span>
-                <span className="text-lg font-black text-blue-600 dark:text-blue-400">{pupiloActivo.promedio}</span>
+                <span className={`text-lg font-black ${typeof pupiloActivo.promedio === 'number' && pupiloActivo.promedio < 4.0 ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                  {pupiloActivo.promedio}
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Asistencia Acumulada</span>
                 <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">{pupiloActivo.asistencia}%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Anotaciones Negativas</span>
-                <span className="text-lg font-black text-red-600 dark:text-red-400">1</span>
               </div>
             </div>
             

@@ -59,10 +59,12 @@ export default function AlumnoLayout() {
     setIsLogoutModalOpen(true);
   };
 
-  const confirmLogout = async () => {
+  const confirmLogout = () => {
     setIsLoggingOut(true);
-    await supabase.auth.signOut();
-    navigate('/');
+    setTimeout(() => {
+      localStorage.removeItem('userLogged');
+      window.location.href = '/';
+    }, 1500);
   };
 
   const isItemActive = (itemPath, exact = false) => {

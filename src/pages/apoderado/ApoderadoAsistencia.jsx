@@ -1,16 +1,84 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import BackdropLoader from '../../components/BackdropLoader';
+import { supabase } from '../../config/supabaseClient';
 
 export default function ApoderadoAsistencia() {
-  const [pupiloActivo] = useState({ nombre: 'Martina Fernández', curso: '2do Medio B' });
+  const [pupilos, setPupilos] = useState([]);
+  const [pupiloActivo, setPupiloActivo] = useState(null);
+  const [inasistencias, setInasistencias] = useState([]);
+  const [metricas, setMetricas] = useState({ porcentaje: 100, faltas: 0, atrasos: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  const [inasistencias] = useState([
-    { id: 1, fecha: 'Martes 21 de Abril 2026', tipo: 'Ausencia Día Completo', estado: 'Pendiente de Justificar', comprobante: null },
-    { id: 2, fecha: 'Lunes 18 de Mayo 2026', tipo: 'Atraso (08:20 AM)', estado: 'Pendiente de Justificar', comprobante: null },
-    { id: 3, fecha: 'Viernes 05 de Junio 2026', tipo: 'Ausencia Día Completo', estado: 'Aprobado por Inspectoría', comprobante: 'licencia_medica_05jun.pdf' },
-  ]);
+  // Inicializar estado desde localStorage
+  useEffect(() => {
+    const pActivoStr = localStorage.getItem('pupiloActivo');
+    const pListaStr = localStorage.getItem('apoderadoPupilos');
+    if (pActivoStr) setPupiloActivo(JSON.parse(pActivoStr));
+    if (pListaStr) setPupilos(JSON.parse(pListaStr));
+  }, []);
+
+  // Escuchar si el pupilo cambia en otra vista
+  useEffect(() => {
+    const handlePupiloChanged = () => {
+      const pActivoStr = localStorage.getItem('pupiloActivo');
+      if (pActivoStr) setPupiloActivo(JSON.parse(pActivoStr));
+    };
+    window.addEventListener('pupiloChanged', handlePupiloChanged);
+    return () => window.removeEventListener('pupiloChanged', handlePupiloChanged);
+  }, []);
+
+  // Cargar asistencia
+  useEffect(() => {
+    if (pupiloActivo) {
+      cargarAsistencia(pupiloActivo.rut);
+    }
+  }, [pupiloActivo]);
+
+  const cargarAsistencia = async (rutAlumno) => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('asistencia_alumnos')
+        .select('*')
+        .eq('rut_alumno', rutAlumno)
+        .order('fecha', { ascending: false });
+
+      if (data) {
+        const total = data.length;
+        const faltasArr = data.filter(a => a.estado.toLowerCase() === 'ausente');
+        const atrasosArr = data.filter(a => a.estado.toLowerCase() === 'atrasado');
+        const presentes = total - faltasArr.length - atrasosArr.length;
+        
+        const porcentaje = total > 0 ? Math.round(((presentes + atrasosArr.length) / total) * 100) : 100;
+
+        setMetricas({ porcentaje, faltas: faltasArr.length, atrasos: atrasosArr.length });
+
+        const anomalos = [...faltasArr, ...atrasosArr].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+        
+        setInasistencias(anomalos.map(a => ({
+          id: a.id,
+          fecha: new Date(a.fecha).toLocaleDateString('es-CL', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+          tipo: a.estado.toLowerCase() === 'ausente' ? 'Ausencia Día Completo' : 'Atraso',
+          estado: 'Pendiente de Justificar', // Simulado
+          comprobante: null
+        })));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCambiarPupilo = (e) => {
+    const seleccionado = pupilos.find(p => p.rut === e.target.value);
+    setPupiloActivo(seleccionado);
+    localStorage.setItem('pupiloActivo', JSON.stringify(seleccionado));
+    window.dispatchEvent(new Event('pupiloChanged'));
+  };
 
   const handleJustificar = (e) => {
     e.preventDefault();
@@ -21,6 +89,20 @@ export default function ApoderadoAsistencia() {
       alert('Certificado enviado exitosamente a Inspectoría.');
     }, 1500);
   };
+
+  if (isLoading) {
+    return <div className="p-8 text-center text-gray-500">Cargando asistencia...</div>;
+  }
+
+  if (!pupiloActivo) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm text-center">
+          <p className="text-gray-500">No tienes pupilos asignados a tu cuenta.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -34,11 +116,28 @@ export default function ApoderadoAsistencia() {
         
         {/* Selector de Pupilo */}
         <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-2 pl-3 rounded-xl border border-gray-200 dark:border-gray-700">
-          <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">MF</div>
-          <div className="flex flex-col pr-8">
-            <span className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-none">{pupiloActivo.nombre}</span>
+          <div className="h-8 w-8 shrink-0 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
+            {pupiloActivo.iniciales || pupiloActivo.nombre.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}
+          </div>
+          <div className="flex flex-col flex-1 pr-2">
+            {pupilos.length > 1 ? (
+              <select 
+                value={pupiloActivo.rut} 
+                onChange={handleCambiarPupilo}
+                className="bg-transparent text-sm font-bold text-gray-800 dark:text-gray-200 leading-none outline-none cursor-pointer appearance-none"
+              >
+                {pupilos.map(p => (
+                  <option key={p.rut} value={p.rut} className="text-gray-800">{p.nombre}</option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-none">{pupiloActivo.nombre}</span>
+            )}
             <span className="text-[10px] text-gray-500 uppercase font-semibold mt-0.5">{pupiloActivo.curso}</span>
           </div>
+          {pupilos.length > 1 && (
+            <svg className="w-5 h-5 text-gray-400 pointer-events-none mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+          )}
         </div>
       </div>
 
@@ -53,10 +152,10 @@ export default function ApoderadoAsistencia() {
               <div>
                 <div className="flex justify-between items-end mb-2">
                   <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Asistencia Total</span>
-                  <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">94%</span>
+                  <span className={`text-2xl font-black ${metricas.porcentaje < 85 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{metricas.porcentaje}%</span>
                 </div>
                 <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
-                  <div className="bg-emerald-500 h-2 rounded-full" style={{ width: '94%' }}></div>
+                  <div className={`${metricas.porcentaje < 85 ? 'bg-red-500' : 'bg-emerald-500'} h-2 rounded-full`} style={{ width: `${metricas.porcentaje}%` }}></div>
                 </div>
                 <p className="text-[10px] text-gray-500 mt-2 text-right">Límite legal para aprobar: 85%</p>
               </div>
@@ -64,11 +163,11 @@ export default function ApoderadoAsistencia() {
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
                 <div>
                   <p className="text-xs text-gray-500">Inasistencias</p>
-                  <p className="text-xl font-bold text-red-600">4 Días</p>
+                  <p className="text-xl font-bold text-red-600">{metricas.faltas} Días</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Atrasos</p>
-                  <p className="text-xl font-bold text-amber-500">2 Días</p>
+                  <p className="text-xl font-bold text-amber-500">{metricas.atrasos} Días</p>
                 </div>
               </div>
             </div>
@@ -90,39 +189,43 @@ export default function ApoderadoAsistencia() {
           </div>
           
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
-            {inasistencias.map((item) => (
-              <div key={item.id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors flex flex-col sm:flex-row justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`w-2 h-2 rounded-full ${item.tipo.includes('Ausencia') ? 'bg-red-500' : 'bg-amber-500'}`}></span>
-                    <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">{item.fecha}</h3>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{item.tipo}</p>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                    item.estado === 'Aprobado por Inspectoría' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                  }`}>
-                    {item.estado}
-                  </span>
-                </div>
-
-                <div className="flex flex-col justify-center sm:items-end">
-                  {item.estado === 'Pendiente de Justificar' ? (
-                    <button 
-                      onClick={() => setIsModalOpen(true)}
-                      className="mt-2 sm:mt-0 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1 transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                      Adjuntar Documento
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                      {item.comprobante}
+            {inasistencias.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">No hay inasistencias ni atrasos registrados.</div>
+            ) : (
+              inasistencias.map((item) => (
+                <div key={item.id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors flex flex-col sm:flex-row justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`w-2 h-2 rounded-full ${item.tipo.includes('Ausencia') ? 'bg-red-500' : 'bg-amber-500'}`}></span>
+                      <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 capitalize">{item.fecha}</h3>
                     </div>
-                  )}
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{item.tipo}</p>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      item.estado === 'Aprobado por Inspectoría' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {item.estado}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col justify-center sm:items-end">
+                    {item.estado === 'Pendiente de Justificar' ? (
+                      <button 
+                        onClick={() => setIsModalOpen(true)}
+                        className="mt-2 sm:mt-0 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                        Adjuntar Documento
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                        {item.comprobante}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -139,8 +242,12 @@ export default function ApoderadoAsistencia() {
               <div>
                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">1. Seleccione la fecha</label>
                 <select className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                  <option>Martes 21 de Abril (Ausencia Día Completo)</option>
-                  <option>Lunes 18 de Mayo (Atraso)</option>
+                  {inasistencias.filter(i => i.estado === 'Pendiente de Justificar').map(i => (
+                    <option key={i.id}>{i.fecha} ({i.tipo})</option>
+                  ))}
+                  {inasistencias.filter(i => i.estado === 'Pendiente de Justificar').length === 0 && (
+                    <option disabled>No hay inasistencias pendientes</option>
+                  )}
                 </select>
               </div>
               

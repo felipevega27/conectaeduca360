@@ -1,47 +1,136 @@
 import { useState, useEffect } from 'react';
-import { mockUsers } from '../../utils/mockUsers';
+import { supabase } from '../../config/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 export default function AlumnoDashboard() {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      setUser(JSON.parse(loggedUserJSON));
-    } else {
-      const fallbackUser = mockUsers.find(u => u.role === 'alumno');
-      setUser(fallbackUser);
-    }
-  }, []);
-
-  // --- DATOS SIMULADOS DEL ALUMNO ---
-  const [alumno] = useState({
-    curso: '2do Medio B',
-    asistencia: 94, // %
-    promedioGeneral: 5.8,
+  // Estados Reales
+  const [alumnoData, setAlumnoData] = useState({
+    cursoNombre: 'Cargando...',
+    asistencia: 0,
+    promedioGeneral: 0,
     anotacionesNegativas: 0
   });
 
-  // Últimas notas subidas al sistema
-  const [ultimasNotas] = useState([
-    { id: 1, asignatura: 'Matemáticas', evaluacion: 'Prueba Ecuaciones', nota: 6.2, fecha: 'Hoy' },
-    { id: 2, asignatura: 'Lenguaje', evaluacion: 'Control de Lectura', nota: 3.8, fecha: 'Ayer' }, // Nota roja
-    { id: 3, asignatura: 'Historia', evaluacion: 'Disertación', nota: 5.5, fecha: 'Hace 3 días' },
-  ]);
+  const [ultimasNotas, setUltimasNotas] = useState([]);
+  const [avisosMuro, setAvisosMuro] = useState([]);
+  const [anotaciones, setAnotaciones] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Tareas pendientes asignadas por los profesores
-  const [tareasPendientes] = useState([
-    { id: 101, asignatura: 'Lenguaje', titulo: 'Ensayo sobre Don Quijote', vence: 'Mañana', urgencia: 'alta' },
-    { id: 102, asignatura: 'Biología', titulo: 'Guía de Células', vence: 'Viernes 18', urgencia: 'media' },
-  ]);
+  useEffect(() => {
+    const loggedUserJSON = localStorage.getItem('userLogged');
+    if (loggedUserJSON) {
+      const parsedUser = JSON.parse(loggedUserJSON);
+      setUser(parsedUser);
+      cargarDatos(parsedUser.rut);
+    }
+  }, []);
 
-  // Últimas anotaciones en el libro de clases
-  const [anotaciones] = useState([
-    { id: 201, tipo: 'positiva', descripcion: 'Excelente participación en la feria científica escolar.', fecha: 'Lunes 08', profesor: 'Luis Tapia' },
-    { id: 202, tipo: 'observacion', descripcion: 'No trae materiales completos para artes.', fecha: 'Semana pasada', profesor: 'Ana Gómez' },
-  ]);
+  const cargarDatos = async (rutAlumno) => {
+    setIsLoading(true);
+    try {
+      // 1. Obtener Matrícula y Curso
+      const { data: matricula } = await supabase
+        .from('matriculas')
+        .select('id_curso, cursos(nombre)')
+        .eq('rut_alumno', rutAlumno)
+        .maybeSingle();
+
+      let cursoId = null;
+      let cursoNombre = 'Sin Curso';
+      if (matricula) {
+        cursoId = matricula.id_curso;
+        cursoNombre = matricula.cursos?.nombre || 'Sin Curso';
+      }
+
+      // 2. Obtener Asistencia
+      const { data: asistencias } = await supabase
+        .from('asistencia_alumnos')
+        .select('estado')
+        .eq('rut_alumno', rutAlumno);
+      
+      let porcentajeAsistencia = 100;
+      if (asistencias && asistencias.length > 0) {
+        const presentes = asistencias.filter(a => a.estado.toLowerCase() === 'presente').length;
+        porcentajeAsistencia = Math.round((presentes / asistencias.length) * 100);
+      }
+
+      // 3. Obtener Anotaciones (Negativas y Recientes)
+      const { data: anotacionesData } = await supabase
+        .from('anotaciones')
+        .select('*, perfiles(nombre)')
+        .eq('rut_alumno', rutAlumno)
+        .order('fecha', { ascending: false });
+      
+      let negativasCount = 0;
+      let ultimasAnot = [];
+      if (anotacionesData) {
+        negativasCount = anotacionesData.filter(a => a.tipo.toLowerCase() === 'negativa').length;
+        ultimasAnot = anotacionesData.slice(0, 3).map(a => ({
+          id: a.id,
+          tipo: a.tipo.toLowerCase(),
+          descripcion: a.descripcion,
+          fecha: new Date(a.fecha).toLocaleDateString('es-CL'),
+          profesor: a.perfiles?.nombre || 'Profesor'
+        }));
+      }
+      setAnotaciones(ultimasAnot);
+
+      // 4. Obtener Calificaciones y Calcular Promedio General
+      const { data: calificacionesData } = await supabase
+        .from('notas')
+        .select('id, nota, created_at, evaluaciones(nombre, id_asignatura, asignaturas(nombre))')
+        .eq('rut_alumno', rutAlumno)
+        .order('created_at', { ascending: false });
+      
+      let promedio = 0;
+      let notasRecientes = [];
+      if (calificacionesData && calificacionesData.length > 0) {
+        const sumaNotas = calificacionesData.reduce((acc, curr) => acc + (curr.nota || 0), 0);
+        promedio = sumaNotas / calificacionesData.length;
+        
+        notasRecientes = calificacionesData.slice(0, 3).map(c => ({
+          id: c.id,
+          asignatura: c.evaluaciones?.asignaturas?.nombre || 'Desconocida',
+          evaluacion: c.evaluaciones?.nombre || 'Evaluación',
+          nota: c.nota,
+          fecha: new Date(c.created_at).toLocaleDateString('es-CL')
+        }));
+      }
+      setUltimasNotas(notasRecientes);
+
+      setAlumnoData({
+        cursoNombre,
+        asistencia: porcentajeAsistencia,
+        promedioGeneral: promedio,
+        anotacionesNegativas: negativasCount
+      });
+
+      // 5. Obtener Avisos (Muro de Avisos del Curso)
+      if (cursoId) {
+        const { data: avisos } = await supabase
+          .from('anuncios_curso')
+          .select('*, perfiles(nombre)')
+          .eq('id_curso', cursoId)
+          .order('fecha_creacion', { ascending: false });
+        
+        if (avisos) {
+          setAvisosMuro(avisos);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error cargando datos del dashboard:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return <div className="flex-1 flex items-center justify-center p-8 bg-gray-50 dark:bg-gray-900"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
+  }
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
@@ -58,32 +147,32 @@ export default function AlumnoDashboard() {
         {/* Tarjeta Promedio */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center hover:-translate-y-1 hover:shadow-lg transition-all">
           <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Promedio General</p>
-          <h2 className={`text-3xl font-black ${alumno.promedioGeneral >= 4.0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
-            {alumno.promedioGeneral.toFixed(1)}
+          <h2 className={`text-3xl font-black ${alumnoData.promedioGeneral >= 4.0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
+            {alumnoData.promedioGeneral > 0 ? alumnoData.promedioGeneral.toFixed(1) : '-'}
           </h2>
         </div>
 
         {/* Tarjeta Asistencia */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center hover:-translate-y-1 hover:shadow-lg transition-all">
           <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Tu Asistencia</p>
-          <h2 className={`text-3xl font-black ${alumno.asistencia >= 85 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-            {alumno.asistencia}%
+          <h2 className={`text-3xl font-black ${alumnoData.asistencia >= 85 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+            {alumnoData.asistencia}%
           </h2>
         </div>
 
         {/* Tarjeta Tareas */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center hover:-translate-y-1 hover:shadow-lg transition-all">
-          <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Tareas Pendientes</p>
+          <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Avisos del Curso</p>
           <h2 className="text-3xl font-black text-blue-700 dark:text-blue-300">
-            {tareasPendientes.length}
+            {avisosMuro.length}
           </h2>
         </div>
 
         {/* Tarjeta Convivencia */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center hover:-translate-y-1 hover:shadow-lg transition-all">
           <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Anotaciones Negativas</p>
-          <h2 className={`text-3xl font-black ${alumno.anotacionesNegativas > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'}`}>
-            {alumno.anotacionesNegativas}
+          <h2 className={`text-3xl font-black ${alumnoData.anotacionesNegativas > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'}`}>
+            {alumnoData.anotacionesNegativas}
           </h2>
         </div>
 
@@ -120,40 +209,35 @@ export default function AlumnoDashboard() {
             </div>
           </div>
 
-          {/* MÓDULO TAREAS PENDIENTES */}
+          {/* MÓDULO MURO DE AVISOS DEL CURSO */}
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
               <h2 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-                Tareas y Asignaciones
+                <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg>
+                Muro de Avisos del Curso
               </h2>
             </div>
-            <div className="p-4 space-y-3">
-              {tareasPendientes.map((tarea) => (
-                <div key={tarea.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5">
-                      {tarea.urgencia === 'alta' 
-                        ? <span className="flex h-3 w-3 rounded-full bg-red-500"></span>
-                        : <span className="flex h-3 w-3 rounded-full bg-amber-400"></span>
-                      }
+            <div className="p-4 space-y-4 max-h-[400px] overflow-y-auto">
+              {avisosMuro.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">No hay avisos recientes.</p>
+              ) : (
+                avisosMuro.map((aviso) => (
+                  <div key={aviso.id} className="border border-gray-100 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-2 bg-gray-50/50 dark:bg-gray-800 hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">{aviso.titulo}</h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Por: {aviso.perfiles?.nombre}</p>
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-400 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600">
+                        {new Date(aviso.fecha_creacion).toLocaleDateString('es-CL')}
+                      </span>
                     </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">{tarea.titulo}</h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{tarea.asignatura}</p>
-                    </div>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 font-medium leading-snug whitespace-pre-wrap bg-white dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
+                      {aviso.contenido}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-3 self-end sm:self-auto">
-                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                      <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      Vence {tarea.vence}
-                    </span>
-                    <button className="text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-800/40 px-3 py-1.5 rounded-lg transition-colors">
-                      Entregar
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -182,28 +266,32 @@ export default function AlumnoDashboard() {
               </h2>
             </div>
             <div className="p-4 space-y-4">
-              {anotaciones.map((anotacion) => (
-                <div key={anotacion.id} className="relative pl-4 border-l-2 border-blue-200 dark:border-blue-800">
-                  <span className={`absolute -left-1.25 top-1 w-2 h-2 rounded-full ${
-                    anotacion.tipo === 'positiva' ? 'bg-emerald-500' :
-                    anotacion.tipo === 'negativa' ? 'bg-red-500' : 'bg-orange-500'
-                  }`}></span>
-                  <div className="flex justify-between items-start mb-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                      anotacion.tipo === 'positiva' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                      anotacion.tipo === 'negativa' ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                    }`}>
-                      Anotación {anotacion.tipo}
-                    </span>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500">{anotacion.fecha}</span>
+              {anotaciones.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center">No tienes anotaciones recientes.</p>
+              ) : (
+                anotaciones.map((anotacion) => (
+                  <div key={anotacion.id} className="relative pl-4 border-l-2 border-blue-200 dark:border-blue-800">
+                    <span className={`absolute -left-1.25 top-1 w-2 h-2 rounded-full ${
+                      anotacion.tipo === 'positiva' ? 'bg-emerald-500' :
+                      anotacion.tipo === 'negativa' ? 'bg-red-500' : 'bg-orange-500'
+                    }`}></span>
+                    <div className="flex justify-between items-start mb-1">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                        anotacion.tipo === 'positiva' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                        anotacion.tipo === 'negativa' ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                      }`}>
+                        Anotación {anotacion.tipo}
+                      </span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500">{anotacion.fecha}</span>
+                    </div>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 my-1 font-medium leading-snug">"{anotacion.descripcion}"</p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400">Registrado por: Prof. {anotacion.profesor}</p>
                   </div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 my-1 font-medium leading-snug">"{anotacion.descripcion}"</p>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Registrado por: Prof. {anotacion.profesor}</p>
-                </div>
-              ))}
+                ))
+              )}
             </div>
             <div className="p-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-center">
-               <button className="text-xs font-bold text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Abrir Hoja de Vida Completa</button>
+               <button onClick={() => navigate('/panel/alumno/anotaciones')} className="text-xs font-bold text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Abrir Hoja de Vida Completa</button>
             </div>
           </div>
 

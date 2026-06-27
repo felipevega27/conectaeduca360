@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../../config/supabaseClient';
 
 export default function AlumnoAsistencia() {
   // --- CONTROL DE ROLES (LA REGLA LEGAL) ---
   const [userRole, setUserRole] = useState('alumno'); 
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     // Leemos quién inició sesión realmente
@@ -10,6 +12,8 @@ export default function AlumnoAsistencia() {
     if (loggedUserJSON) {
       const user = JSON.parse(loggedUserJSON);
       setUserRole(user.role || user.rol || 'alumno');
+      setCurrentUser(user);
+      cargarDatos(user.rut);
     }
   }, []);
 
@@ -17,32 +21,106 @@ export default function AlumnoAsistencia() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [faltaSeleccionada, setFaltaSeleccionada] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // --- DATOS SIMULADOS ---
-  const [resumen] = useState({
-    porcentajeGlobal: 94,
-    diasPresente: 62,
-    diasAusente: 4,
-    atrasos: 2
+  // --- DATOS REALES ---
+  const [resumen, setResumen] = useState({
+    porcentajeGlobal: 0,
+    diasPresente: 0,
+    diasAusente: 0,
+    atrasos: 0
   });
 
-  const [historial] = useState([
-    { id: 1, fecha: 'Jueves 04 de Junio', tipo: 'Ausente', estado: 'Justificada', observacion: 'Licencia Médica' },
-    { id: 2, fecha: 'Viernes 05 de Junio', tipo: 'Ausente', estado: 'Justificada', observacion: 'Licencia Médica' },
-    { id: 3, fecha: 'Lunes 18 de Mayo', tipo: 'Atraso', estado: 'Sin Justificar', observacion: 'Llegó a las 08:20 AM' },
-    { id: 4, fecha: 'Martes 21 de Abril', tipo: 'Ausente', estado: 'Sin Justificar', observacion: '-' },
-  ]);
+  const [historial, setHistorial] = useState([]);
+  const [diasMes, setDiasMes] = useState([]);
 
-  const diasMes = Array.from({ length: 30 }, (_, i) => {
-    const dia = i + 1;
-    const diaSemana = new Date(2026, 5, dia).getDay(); 
-    let estado = 'presente';
-    if (diaSemana === 0 || diaSemana === 6) estado = 'fin-de-semana'; 
-    else if (dia === 4 || dia === 5) estado = 'ausente'; 
-    else if (dia === 12) estado = 'atraso'; 
-    else if (dia > 14) estado = 'futuro'; 
-    return { id: dia, dia, estado };
-  });
+  const generarCalendario = (asistencias) => {
+    const fechaActual = new Date();
+    // Forzamos a usar el mes y año local para evitar problemas de zona horaria
+    const mesActual = fechaActual.getMonth(); 
+    const anioActual = fechaActual.getFullYear();
+    const diasEnMes = new Date(anioActual, mesActual + 1, 0).getDate();
+    
+    const dias = Array.from({ length: diasEnMes }, (_, i) => {
+      const dia = i + 1;
+      const fechaLocal = new Date(anioActual, mesActual, dia);
+      const diaSemana = fechaLocal.getDay();
+      
+      // Formato YYYY-MM-DD local
+      const mesStr = String(mesActual + 1).padStart(2, '0');
+      const diaStr = String(dia).padStart(2, '0');
+      const fechaString = `${anioActual}-${mesStr}-${diaStr}`;
+      
+      let estado = 'futuro';
+      if (diaSemana === 0 || diaSemana === 6) {
+         estado = 'fin-de-semana';
+      } else {
+         const registro = asistencias.find(a => a.fecha === fechaString);
+         if (registro) {
+            estado = registro.estado.toLowerCase();
+         } else if (fechaLocal <= fechaActual) {
+            estado = 'sin-registro'; 
+         }
+      }
+      return { id: dia, dia, estado, fecha: fechaString };
+    });
+    setDiasMes(dias);
+  };
+
+  const cargarDatos = async (rutAlumno) => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('asistencia_alumnos')
+        .select('*')
+        .eq('rut_alumno', rutAlumno)
+        .order('fecha', { ascending: false });
+        
+      if (error) throw error;
+
+      if (data) {
+        let presentes = 0;
+        let ausentes = 0;
+        let atrasosCount = 0;
+        
+        const hist = [];
+        
+        data.forEach(reg => {
+           const est = reg.estado.toLowerCase();
+           if (est === 'presente') presentes++;
+           if (est === 'ausente') ausentes++;
+           if (est === 'atrasado') atrasosCount++;
+           
+           if (est === 'ausente' || est === 'atrasado') {
+              hist.push({
+                 id: reg.id,
+                 fecha: new Date(reg.fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: '2-digit', month: 'long' }),
+                 tipo: reg.estado,
+                 estado: 'Sin Justificar', // Por defecto hasta implementar tabla de justificaciones
+                 observacion: '-'
+              });
+           }
+        });
+        
+        const total = presentes + ausentes + atrasosCount;
+        const porcentaje = total > 0 ? Math.round((presentes / total) * 100) : 100;
+        
+        setResumen({
+          porcentajeGlobal: porcentaje,
+          diasPresente: presentes,
+          diasAusente: ausentes,
+          atrasos: atrasosCount
+        });
+        
+        setHistorial(hist);
+        generarCalendario(data);
+      }
+    } catch (err) {
+      console.error('Error cargando asistencia:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleUploadCertificado = (e) => {
     e.preventDefault();
@@ -115,7 +193,9 @@ export default function AlumnoAsistencia() {
         <div className="lg:col-span-2">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden h-full">
             <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex items-center justify-between">
-              <h2 className="text-base font-bold text-gray-800 dark:text-white">Junio 2026</h2>
+              <h2 className="text-base font-bold text-gray-800 dark:text-white capitalize">
+                {new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })}
+              </h2>
               <div className="flex gap-4 text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Presente</span>
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500"></span> Ausente</span>
@@ -137,10 +217,12 @@ export default function AlumnoAsistencia() {
                       className={`w-9 h-9 flex items-center justify-center rounded-full text-sm font-semibold transition-all ${
                         dia.estado === 'presente' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-200 dark:ring-emerald-800/50' :
                         dia.estado === 'ausente' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 ring-1 ring-red-300 dark:ring-red-800/50 shadow-sm dark:shadow-none' :
-                        dia.estado === 'atraso' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 ring-1 ring-amber-300 dark:ring-amber-800/50 shadow-sm dark:shadow-none' :
+                        dia.estado === 'atrasado' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 ring-1 ring-amber-300 dark:ring-amber-800/50 shadow-sm dark:shadow-none' :
                         dia.estado === 'fin-de-semana' ? 'text-gray-300 dark:text-gray-600 bg-transparent' :
-                        'text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700' 
+                        dia.estado === 'futuro' ? 'text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700' :
+                        'text-gray-400 dark:text-gray-500 bg-transparent border border-dashed border-gray-300 dark:border-gray-600' 
                       }`}
+                      title={dia.fecha}
                     >
                       {dia.dia}
                     </div>
@@ -159,13 +241,16 @@ export default function AlumnoAsistencia() {
             </div>
             
             <div className="divide-y divide-gray-100 dark:divide-gray-700 flex-1 overflow-y-auto custom-scrollbar">
-              {historial.map(item => (
-                <div key={item.id} className="p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${item.tipo === 'Ausente' ? 'bg-red-500' : 'bg-amber-500'}`}></span>
-                      <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{item.tipo}</p>
-                    </div>
+              {historial.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 text-sm">No tienes inasistencias registradas.</div>
+              ) : (
+                historial.map(item => (
+                  <div key={item.id} className="p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${item.tipo.toLowerCase() === 'ausente' ? 'bg-red-500' : 'bg-amber-500'}`}></span>
+                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 capitalize">{item.tipo}</p>
+                      </div>
                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                       item.estado === 'Justificada' 
                       ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' 
@@ -190,7 +275,7 @@ export default function AlumnoAsistencia() {
                     </button>
                   )}
                 </div>
-              ))}
+              )))}
             </div>
           </div>
         </div>

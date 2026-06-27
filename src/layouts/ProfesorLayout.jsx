@@ -82,7 +82,7 @@ export default function ProfesorLayout() {
     setIsLoggingOut(true);
     setTimeout(() => {
       localStorage.removeItem('userLogged');
-      navigate('/');
+      window.location.href = '/';
     }, 1500);
   };
 

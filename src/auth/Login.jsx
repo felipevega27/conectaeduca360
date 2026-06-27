@@ -160,11 +160,11 @@ export default function Login() {
         {/* Capa súper sutil para que la imagen no queme la pantalla, pero sin oscurecerla */}
         <div className="absolute inset-0 bg-blue-900/5 z-10" />
 
-        {/* Imagen anclada a la parte superior (object-top) para no cortar el logo */}
+        {/* Imagen ligeramente desplazada hacia arriba (20%) para centrar mejor el logo */}
         <img
           src={fachadaImg}
           alt="Estudiantes"
-          className="absolute inset-0 h-full w-full object-cover object-top z-0"
+          className="absolute -top-[20%] left-0 h-[120%] w-full object-cover object-top z-0"
         />
       </div>
 

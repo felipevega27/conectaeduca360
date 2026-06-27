@@ -53,7 +53,7 @@ export default function ApoderadoLayout() {
     setIsLoggingOut(true);
     setTimeout(() => {
       localStorage.removeItem('userLogged');
-      navigate('/');
+      window.location.href = '/';
     }, 1500);
   };
 

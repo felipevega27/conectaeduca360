@@ -91,7 +91,7 @@ export default function DirectorLayout() {
     setIsLoggingOut(true);
     setTimeout(() => {
       localStorage.removeItem('userLogged');
-      navigate('/');
+      window.location.href = '/';
     }, 1500);
   };
 
