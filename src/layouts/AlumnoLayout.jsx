@@ -7,6 +7,7 @@ import TopHeader from '../components/TopHeader';
 
 export default function AlumnoLayout() {
   const [user, setUser] = useState(null);
+  const [avatarLayout, setAvatarLayout] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
@@ -21,18 +22,26 @@ export default function AlumnoLayout() {
   const location = useLocation();
 
   useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        setUser(profile);
-      }
-    };
-    fetchUser();
+    const loggedUserJSON = localStorage.getItem('userLogged');
+    if (loggedUserJSON) {
+      const parsedUser = JSON.parse(loggedUserJSON);
+      setUser(parsedUser);
+
+      // Fetch fresh avatar
+      const fetchAvatar = async () => {
+        try {
+          const { data } = await supabase.from('perfiles').select('avatar_url').eq('rut', parsedUser.rut || parsedUser.id).single();
+          if (data && data.avatar_url) {
+            setAvatarLayout(data.avatar_url);
+          } else if (parsedUser.avatar_url) {
+            setAvatarLayout(parsedUser.avatar_url);
+          }
+        } catch (e) {
+          console.error("Error fetching avatar for layout", e);
+        }
+      };
+      fetchAvatar();
+    }
   }, []);
 
   // Efecto para aplicar o quitar la clase dark del HTML
@@ -91,12 +100,12 @@ export default function AlumnoLayout() {
         <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${isCollapsed ? 'lg:justify-center justify-between px-4' : 'justify-between px-4'}`}>
           {/* LOGO COMPLETO: Visible en móvil siempre, o en PC si no está colapsado */}
           <div className={`flex items-center space-x-2 overflow-hidden cursor-pointer ${isCollapsed ? 'lg:hidden' : ''}`} onClick={() => { navigate('/panel/alumno'); setIsMobileMenuOpen(false); }}>
-            <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
+            <img src={logoTexto} alt="Logo ConectaEduc" className="h-10 w-auto object-contain" />
           </div>
 
           {/* LOGO ICONO: Visible SOLO en PC cuando está colapsado */}
           <div className={`items-center justify-center cursor-pointer ${isCollapsed ? 'hidden lg:flex' : 'hidden'}`} onClick={() => { navigate('/panel/alumno'); setIsMobileMenuOpen(false); }}>
-            <img src={logoImg} alt="Logo" className="h-8 w-8 object-contain transition-transform hover:scale-105" />
+            <img src={logoImg} alt="Logo" className="h-12 w-12 object-contain transition-transform hover:scale-105" />
           </div>
           <button onClick={() => setIsMobileMenuOpen(false)} className="text-gray-500 hover:text-gray-600 lg:hidden shrink-0 transition-colors">
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -201,6 +210,7 @@ export default function AlumnoLayout() {
       <div className="flex-1 flex flex-col min-w-0 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
         <TopHeader
           user={user}
+          avatarLayout={avatarLayout}
           isCollapsed={isCollapsed}
           setIsCollapsed={setIsCollapsed}
           isMobileMenuOpen={isMobileMenuOpen}

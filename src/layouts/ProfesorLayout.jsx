@@ -116,12 +116,12 @@ export default function ProfesorLayout() {
         <div className={`h-16 flex items-center border-b border-gray-200 dark:border-gray-700 ${isCollapsed ? 'lg:justify-center justify-between px-4' : 'justify-between px-4'}`}>
           {/* LOGO COMPLETO: Visible en móvil siempre, o en PC si no está colapsado */}
           <div className={`flex items-center space-x-2 overflow-hidden cursor-pointer ${isCollapsed ? 'lg:hidden' : ''}`} onClick={() => { navigate('/panel/profesor'); setIsMobileMenuOpen(false); }}>
-            <img src={logoTexto} alt="Logo ConectaEduc" className="h-8 w-auto object-contain" />
+            <img src={logoTexto} alt="Logo ConectaEduc" className="h-10 w-auto object-contain" />
           </div>
 
           {/* LOGO ICONO: Visible SOLO en PC cuando está colapsado */}
           <div className={`items-center justify-center cursor-pointer ${isCollapsed ? 'hidden lg:flex' : 'hidden'}`} onClick={() => { navigate('/panel/profesor'); setIsMobileMenuOpen(false); }}>
-            <img src={logoImg} alt="Logo" className="h-8 w-8 object-contain transition-transform hover:scale-105" />
+            <img src={logoImg} alt="Logo" className="h-12 w-12 object-contain transition-transform hover:scale-105" />
           </div>
           
           <button onClick={() => setIsMobileMenuOpen(false)} className="text-gray-500 hover:text-gray-600 lg:hidden shrink-0">

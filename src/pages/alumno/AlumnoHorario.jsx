@@ -3,9 +3,16 @@ import { supabase } from '../../config/supabaseClient';
 
 export default function AlumnoHorario() {
   const [diaFiltro, setDiaFiltro] = useState('Hoy'); 
-  const [cronogramaHoy, setCronogramaHoy] = useState([]);
+  const [horarioCompleto, setHorarioCompleto] = useState([]);
   const [proximasEvaluaciones, setProximasEvaluaciones] = useState([]);
+  const [feriadoHoy, setFeriadoHoy] = useState(null);
+  const [feriadosSemana, setFeriadosSemana] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+
+  // Determinar "Hoy" (Fallback a Lunes si es finde)
+  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const diaActualReal = dias[new Date().getDay()];
+  const diaHoy = diaActualReal === 'Sábado' || diaActualReal === 'Domingo' ? 'Lunes' : diaActualReal;
 
   useEffect(() => {
     const loggedUserJSON = localStorage.getItem('userLogged');
@@ -18,6 +25,56 @@ export default function AlumnoHorario() {
   const cargarDatos = async (rutAlumno) => {
     setIsLoading(true);
     try {
+      const ahora = new Date();
+      // Formato local YYYY-MM-DD para hoy
+      const yyyy = ahora.getFullYear();
+      const mm = String(ahora.getMonth() + 1).padStart(2, '0');
+      const dd = String(ahora.getDate()).padStart(2, '0');
+      const hoyIso = `${yyyy}-${mm}-${dd}`;
+
+      // 0. Verificar Feriados de la semana actual
+      const fechasSemanaActual = [];
+      const tempDate = new Date();
+      let currentDay = tempDate.getDay() || 7; 
+      
+      // Si es fin de semana (Sábado o Domingo), mostrar la semana que viene
+      if (currentDay > 5) {
+         tempDate.setDate(tempDate.getDate() + (8 - currentDay));
+         currentDay = 1; // Ajustamos a Lunes
+      }
+
+      tempDate.setDate(tempDate.getDate() - currentDay + 1); // Obtener el Lunes
+      
+      for (let i = 0; i < 5; i++) {
+         const f = new Date(tempDate);
+         f.setDate(tempDate.getDate() + i);
+         // Extraer fecha local sin usar toISOString para evitar desfase de UTC (4 hrs en Chile)
+         const fYear = f.getFullYear();
+         const fMonth = String(f.getMonth() + 1).padStart(2, '0');
+         const fDay = String(f.getDate()).padStart(2, '0');
+         fechasSemanaActual.push(`${fYear}-${fMonth}-${fDay}`);
+      }
+
+      const { data: feriadosData } = await supabase
+        .from('feriados')
+        .select('*')
+        .in('fecha', fechasSemanaActual);
+      
+      const feriadosDict = {};
+      let feriadoHoyData = null;
+
+      if (feriadosData) {
+        feriadosData.forEach(f => {
+           if (f.fecha === hoyIso) feriadoHoyData = f;
+           const dateObj = new Date(f.fecha + 'T12:00:00'); // Evitar timezone shift
+           const diaNombre = dias[dateObj.getDay()];
+           feriadosDict[diaNombre] = f.nombre;
+        });
+      }
+
+      setFeriadoHoy(feriadoHoyData);
+      setFeriadosSemana(feriadosDict);
+
       // 1. Obtener curso
       const { data: matricula } = await supabase.from('matriculas').select('id_curso').eq('rut_alumno', rutAlumno).maybeSingle();
       if (!matricula) {
@@ -26,44 +83,44 @@ export default function AlumnoHorario() {
       }
       const idCurso = matricula.id_curso;
 
-      // 2. Horario de Hoy
-      const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      const hoy = dias[new Date().getDay()]; 
-
+      // 2. Horario Completo del Curso
       const { data: horarioData } = await supabase
         .from('horarios')
-        .select('bloque, hora_inicio, hora_fin, sala, asignaturas(nombre), perfiles(nombre)')
+        .select('bloque, hora_inicio, hora_fin, sala, dia_semana, asignaturas(nombre), perfiles(nombre)')
         .eq('id_curso', idCurso)
-        .eq('dia_semana', hoy === 'Sábado' || hoy === 'Domingo' ? 'Lunes' : hoy) // Fallback Lunes si es finde
         .order('hora_inicio', { ascending: true });
 
-      const ahora = new Date();
       const horaActualStr = ahora.toTimeString().substring(0, 5); // "14:30"
 
       if (horarioData) {
         const cronograma = horarioData.map((h, index) => {
           let estado = 'Pendiente';
-          if (h.hora_fin < horaActualStr) estado = 'Terminada';
-          else if (h.hora_inicio <= horaActualStr && h.hora_fin >= horaActualStr) estado = 'En Curso';
+          if (diaActualReal === h.dia_semana) {
+             if (h.hora_fin < horaActualStr) estado = 'Terminada';
+             else if (h.hora_inicio <= horaActualStr && h.hora_fin >= horaActualStr) estado = 'En Curso';
+          } else {
+             estado = 'Pendiente'; // Otros días
+          }
           
           return {
             id: index,
+            dia: h.dia_semana,
             bloque: h.bloque || `Bloque ${index + 1}`,
             hora: `${h.hora_inicio.substring(0,5)} - ${h.hora_fin.substring(0,5)}`,
             asignatura: h.asignaturas?.nombre || 'Asignatura',
             sala: h.sala || 'Por definir',
             profesor: h.perfiles?.nombre || 'Profesor no asignado',
-            estado
+            estado,
+            hora_inicio: h.hora_inicio
           };
         });
-        setCronogramaHoy(cronograma);
+        setHorarioCompleto(cronograma);
       }
 
       // 3. Próximas Evaluaciones
       const { data: asigs } = await supabase.from('asignaturas').select('id, nombre').eq('id_curso', idCurso);
       if (asigs && asigs.length > 0) {
         const ids = asigs.map(a => a.id);
-        const hoyIso = ahora.toISOString().split('T')[0];
         
         const { data: evals } = await supabase
           .from('evaluaciones')
@@ -106,6 +163,19 @@ export default function AlumnoHorario() {
     return <div className="p-8 text-center text-gray-500">Cargando tu horario...</div>;
   }
 
+  // Filtrar horario según selección
+  let horarioFiltrado = [];
+  if (diaFiltro === 'Hoy') {
+     horarioFiltrado = horarioCompleto.filter(h => h.dia === diaHoy).sort((a,b) => a.hora_inicio.localeCompare(b.hora_inicio));
+  }
+
+  // Para la vista semanal, agrupamos por día
+  const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+  const horarioPorDia = {};
+  diasSemana.forEach(d => {
+    horarioPorDia[d] = horarioCompleto.filter(h => h.dia === d).sort((a,b) => a.hora_inicio.localeCompare(b.hora_inicio));
+  });
+
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       
@@ -120,13 +190,13 @@ export default function AlumnoHorario() {
         <div className="flex bg-white dark:bg-gray-800 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
           <button 
             onClick={() => setDiaFiltro('Hoy')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${diaFiltro === 'Hoy' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 dark:text-gray-400'}`}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${diaFiltro === 'Hoy' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
           >
             Clases de Hoy
           </button>
           <button 
-            onClick={() => alert('Abriendo vista de malla horaria completa de Lunes a Viernes...')}
-            className="px-3 py-1.5 text-xs font-bold rounded-md text-gray-600 dark:text-gray-400"
+            onClick={() => setDiaFiltro('Semanal')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${diaFiltro === 'Semanal' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
           >
             Ver Semanal
           </button>
@@ -141,57 +211,113 @@ export default function AlumnoHorario() {
             <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex items-center justify-between">
               <h2 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                Bloques de Clase para Hoy
+                {diaFiltro === 'Hoy' ? 'Bloques de Clase para Hoy' : 'Malla Horaria Semanal'}
               </h2>
               <span className="text-xs text-gray-400 dark:text-gray-500 font-semibold capitalize">
-                {new Date().toLocaleDateString('es-CL', { weekday: 'long' })}
+                {diaFiltro === 'Hoy' ? diaHoy : 'Lunes a Viernes'}
               </span>
             </div>
 
-            <div className="p-4 space-y-3">
-              {cronogramaHoy.length === 0 ? (
-                 <p className="text-sm text-gray-500 text-center py-6">No hay clases programadas para hoy o no estás asignado a un curso con horario.</p>
-              ) : (
-                cronogramaHoy.map((clase, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
-                      clase.estado === 'En Curso'
-                      ? 'border-indigo-300 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-1 ring-indigo-400/30'
-                      : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800'
-                    }`}
-                  >
-                    {/* Bloque / Horario */}
-                    <div className="flex items-center gap-3 min-w-[140px]">
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide ${
-                        clase.estado === 'En Curso' ? 'bg-indigo-600 text-white' :
-                        clase.estado === 'Terminada' ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 line-through' :
-                        'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
-                      }`}>
-                        {clase.bloque.split(' ')[0]}
-                      </span>
-                      <span className="text-xs font-mono font-bold text-gray-500 dark:text-gray-400">{clase.hora}</span>
-                    </div>
-
-                    {/* Asignatura y Ubicación */}
-                    <div className="flex-1">
-                      <h4 className={`text-base font-bold ${clase.estado === 'Terminada' ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-800 dark:text-gray-200'}`}>
-                        {clase.asignatura}
-                      </h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{clase.profesor}</p>
-                    </div>
-
-                    {/* Ubicación de la Sala */}
-                    <div className="text-left sm:text-right">
-                      <span className={`inline-flex px-3 py-1 rounded-lg text-xs font-bold ${
-                        clase.estado === 'En Curso' ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                      }`}>
-                        {clase.sala}
-                      </span>
-                    </div>
-
+            <div className="p-4">
+              {diaFiltro === 'Hoy' ? (
+                // VISTA: HOY
+                feriadoHoy ? (
+                  <div className="flex flex-col items-center justify-center py-10 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl border border-dashed border-emerald-200 dark:border-emerald-800">
+                    <span className="text-4xl mb-3">🏖️</span>
+                    <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-300">¡Es Feriado!</h3>
+                    <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1 capitalize text-center px-4">{feriadoHoy.nombre}</p>
                   </div>
-                ))
+                ) : (
+                  <div className="space-y-3">
+                    {horarioFiltrado.length === 0 ? (
+                       <p className="text-sm text-gray-500 text-center py-6">No hay clases programadas para este día.</p>
+                    ) : (
+                      horarioFiltrado.map((clase, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
+                          clase.estado === 'En Curso'
+                          ? 'border-indigo-300 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 ring-1 ring-indigo-400/30'
+                          : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800'
+                        }`}
+                      >
+                        {/* Bloque / Horario */}
+                        <div className="flex items-center gap-3 min-w-[140px]">
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide ${
+                            clase.estado === 'En Curso' ? 'bg-indigo-600 text-white' :
+                            clase.estado === 'Terminada' ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 line-through' :
+                            'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
+                          }`}>
+                            {clase.bloque.split(' ')[0]}
+                          </span>
+                          <span className="text-xs font-mono font-bold text-gray-500 dark:text-gray-400">{clase.hora}</span>
+                        </div>
+
+                        {/* Asignatura y Ubicación */}
+                        <div className="flex-1">
+                          <h4 className={`text-base font-bold ${clase.estado === 'Terminada' ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-800 dark:text-gray-200'}`}>
+                            {clase.asignatura}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{clase.profesor}</p>
+                        </div>
+
+                        {/* Ubicación de la Sala */}
+                        <div className="text-left sm:text-right">
+                          <span className={`inline-flex px-3 py-1 rounded-lg text-xs font-bold ${
+                            clase.estado === 'En Curso' ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                          }`}>
+                            {clase.sala}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                )
+              ) : (
+                // VISTA: SEMANAL
+                <div className="space-y-6">
+                  {diasSemana.map(dia => (
+                     <div key={dia} className="border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
+                       <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                         <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">{dia}</h3>
+                         {feriadosSemana[dia] && (
+                           <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full uppercase tracking-wider">Feriado</span>
+                         )}
+                       </div>
+                       <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {feriadosSemana[dia] ? (
+                            <div className="px-4 py-6 flex flex-col items-center justify-center bg-emerald-50/30 dark:bg-emerald-900/10">
+                               <span className="text-2xl mb-1">🏖️</span>
+                               <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 text-center capitalize">{feriadosSemana[dia]}</p>
+                            </div>
+                          ) : horarioPorDia[dia].length === 0 ? (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 px-4 py-3 italic">Sin clases este día.</p>
+                          ) : (
+                            horarioPorDia[dia].map((clase, idx) => (
+                              <div key={idx} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                <div className="flex items-center gap-2 w-32 shrink-0">
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                                    {clase.bloque.split(' ')[0]}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-gray-500">{clase.hora}</span>
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{clase.asignatura}</p>
+                                  <p className="text-[10px] text-gray-500 dark:text-gray-400">{clase.profesor}</p>
+                                </div>
+                                <div className="text-left sm:text-right">
+                                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded">
+                                    {clase.sala}
+                                  </span>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                       </div>
+                     </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

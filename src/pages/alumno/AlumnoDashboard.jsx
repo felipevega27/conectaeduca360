@@ -246,16 +246,6 @@ export default function AlumnoDashboard() {
         {/* COLUMNA DERECHA: ASISTENCIA DE HOY Y HOJA DE VIDA */}
         <div className="space-y-6">
           
-          {/* MÓDULO ASISTENCIA HOY */}
-          <div className="bg-linear-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-sm overflow-hidden text-white p-6 relative">
-            <svg className="absolute top-0 right-0 w-32 h-32 text-emerald-400/30 -mt-4 -mr-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm-1.177-7.86l-2.765-2.767L7 12.431l3.119 3.121a1 1 0 001.414 0l5.952-5.95-1.062-1.062-5.6 5.6z"/></svg>
-            <h2 className="text-sm font-bold text-emerald-50 mb-1">Registro de Portería</h2>
-            <p className="text-2xl font-black mb-4">Ingreso Registrado</p>
-            <div className="bg-emerald-700/30 backdrop-blur-sm rounded-xl p-3 inline-block">
-              <p className="text-xs font-medium text-emerald-100">Llegaste hoy a las:</p>
-              <p className="text-lg font-bold">07:52 AM</p>
-            </div>
-          </div>
 
           {/* MÓDULO HOJA DE VIDA */}
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden">
