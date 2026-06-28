@@ -157,7 +157,14 @@ export default function AlumnoMateriales() {
   };
 
   if (isLoading) {
-    return <div className="p-8 text-center text-gray-500">Cargando Aula Virtual...</div>;
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando Aula Virtual...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

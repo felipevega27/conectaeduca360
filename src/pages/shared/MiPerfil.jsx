@@ -50,6 +50,30 @@ export default function MiPerfil() {
 
       if (error) throw error;
       
+      // Si es alumno, cargamos sus datos académicos/familiares básicos
+      if (data.rol === 'alumno' || data.role === 'alumno') {
+        const { data: matricula } = await supabase
+          .from('matriculas')
+          .select('rut_apoderado, id_curso, cursos(nombre, rut_profesor_jefe)')
+          .eq('rut_alumno', rut)
+          .maybeSingle();
+        
+        if (matricula) {
+          data.alumnoData = {
+            curso: matricula.cursos?.nombre || 'Sin Curso',
+          };
+          
+          if (matricula.rut_apoderado) {
+             const { data: apod } = await supabase.from('perfiles').select('nombre').eq('rut', matricula.rut_apoderado).maybeSingle();
+             data.alumnoData.apoderado_nombre = apod?.nombre;
+          }
+          if (matricula.cursos?.rut_profesor_jefe) {
+             const { data: profe } = await supabase.from('perfiles').select('nombre').eq('rut', matricula.cursos.rut_profesor_jefe).maybeSingle();
+             data.alumnoData.profesor_jefe_nombre = profe?.nombre;
+          }
+        }
+      }
+
       setPerfil(data);
       setEditForm({
         email: data.email || '',
@@ -175,15 +199,10 @@ export default function MiPerfil() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-8 min-h-screen">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <SkeletonBase className="h-48 w-full rounded-2xl" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <SkeletonCard />
-            <div className="md:col-span-2">
-              <SkeletonCard />
-            </div>
-          </div>
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando tu perfil...</p>
         </div>
       </div>
     );
@@ -312,6 +331,29 @@ export default function MiPerfil() {
                     <span className="text-xs text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider font-semibold">Fecha de Nacimiento</span>
                     <span className="text-sm font-medium text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded-lg border border-gray-100 dark:border-gray-700">{perfil.fecha_nacimiento}</span>
                   </div>
+                )}
+                
+                {/* DATOS EXCLUSIVOS DE ALUMNO */}
+                {perfil.alumnoData && (
+                  <>
+                    <hr className="border-gray-100 dark:border-gray-700 my-2" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider font-semibold">Curso Actual</span>
+                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-3 py-2 rounded-lg border border-blue-100 dark:border-blue-800/50">{perfil.alumnoData.curso}</span>
+                    </div>
+                    {perfil.alumnoData.profesor_jefe_nombre && (
+                      <div className="flex flex-col">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider font-semibold">Profesor Jefe</span>
+                        <span className="text-sm font-medium text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded-lg border border-gray-100 dark:border-gray-700">{perfil.alumnoData.profesor_jefe_nombre}</span>
+                      </div>
+                    )}
+                    {perfil.alumnoData.apoderado_nombre && (
+                      <div className="flex flex-col">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider font-semibold">Apoderado Titular</span>
+                        <span className="text-sm font-medium text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded-lg border border-gray-100 dark:border-gray-700">{perfil.alumnoData.apoderado_nombre}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

@@ -198,6 +198,17 @@ export default function DirectorDocentes() {
     doc.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || doc.asignatura.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando directorio docente...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       <Toaster position="top-right" toastOptions={{ className: 'dark:!bg-gray-800 dark:!text-white dark:border dark:!border-gray-700' }} />
@@ -250,14 +261,6 @@ export default function DirectorDocentes() {
         </div>
 
         <div className="overflow-x-auto">
-          {isLoading ? (
-            <div className="divide-y divide-gray-100 dark:divide-gray-700">
-              <SkeletonRow />
-              <SkeletonRow />
-              <SkeletonRow />
-              <SkeletonRow />
-            </div>
-          ) : (
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="bg-gray-50/80 dark:bg-gray-900/50 text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
@@ -323,7 +326,6 @@ export default function DirectorDocentes() {
                 )}
               </tbody>
             </table>
-          )}
         </div>
       </div>
 

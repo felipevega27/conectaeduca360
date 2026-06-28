@@ -266,6 +266,17 @@ export default function DirectorAlumnos() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando lista de alumnos...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       
@@ -338,15 +349,7 @@ export default function DirectorAlumnos() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {isLoading ? (
-                <>
-                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
-                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
-                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
-                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
-                  <tr><td colSpan="12"><SkeletonRow /></td></tr>
-                </>
-              ) : currentItems.length > 0 ? (
+              {currentItems.length > 0 ? (
                 currentItems.map((alumno) => (
                   <tr key={alumno.rut} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group">
                     <td className="p-4 flex items-center gap-3">

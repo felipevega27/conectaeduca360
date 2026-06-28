@@ -60,7 +60,7 @@ export default function AlumnoDashboard() {
       // 3. Obtener Anotaciones (Negativas y Recientes)
       const { data: anotacionesData } = await supabase
         .from('anotaciones')
-        .select('*, perfiles(nombre)')
+        .select('*, perfiles!rut_profesor(nombre)')
         .eq('rut_alumno', rutAlumno)
         .order('fecha', { ascending: false });
       
@@ -81,9 +81,9 @@ export default function AlumnoDashboard() {
       // 4. Obtener Calificaciones y Calcular Promedio General
       const { data: calificacionesData } = await supabase
         .from('notas')
-        .select('id, nota, created_at, evaluaciones(nombre, id_asignatura, asignaturas(nombre))')
+        .select('*')
         .eq('rut_alumno', rutAlumno)
-        .order('created_at', { ascending: false });
+        .order('fecha', { ascending: false });
       
       let promedio = 0;
       let notasRecientes = [];
@@ -91,12 +91,29 @@ export default function AlumnoDashboard() {
         const sumaNotas = calificacionesData.reduce((acc, curr) => acc + (curr.nota || 0), 0);
         promedio = sumaNotas / calificacionesData.length;
         
-        notasRecientes = calificacionesData.slice(0, 3).map(c => ({
+        // Obtener Asignaturas y Evaluaciones para las 3 notas más recientes
+        const recientes = calificacionesData.slice(0, 3);
+        const asignaturasIds = [...new Set(recientes.map(n => n.id_asignatura).filter(Boolean))];
+        const evaluacionesIds = [...new Set(recientes.map(n => n.id_evaluacion).filter(Boolean))];
+        
+        let asignaturasMap = {};
+        let evaluacionesMap = {};
+        
+        if (asignaturasIds.length > 0) {
+          const { data: asigData } = await supabase.from('asignaturas').select('id, nombre').in('id', asignaturasIds);
+          if (asigData) asigData.forEach(a => asignaturasMap[a.id] = a.nombre);
+        }
+        if (evaluacionesIds.length > 0) {
+          const { data: evalData } = await supabase.from('evaluaciones').select('id, nombre').in('id', evaluacionesIds);
+          if (evalData) evalData.forEach(e => evaluacionesMap[e.id] = e.nombre);
+        }
+
+        notasRecientes = recientes.map(c => ({
           id: c.id,
-          asignatura: c.evaluaciones?.asignaturas?.nombre || 'Desconocida',
-          evaluacion: c.evaluaciones?.nombre || 'Evaluación',
+          asignatura: asignaturasMap[c.id_asignatura] || 'Desconocida',
+          evaluacion: evaluacionesMap[c.id_evaluacion] || 'Evaluación',
           nota: c.nota,
-          fecha: new Date(c.created_at).toLocaleDateString('es-CL')
+          fecha: new Date(c.created_at || c.fecha).toLocaleDateString('es-CL')
         }));
       }
       setUltimasNotas(notasRecientes);
@@ -112,7 +129,7 @@ export default function AlumnoDashboard() {
       if (cursoId) {
         const { data: avisos } = await supabase
           .from('anuncios_curso')
-          .select('*, perfiles(nombre)')
+          .select('*, perfiles!rut_profesor(nombre)')
           .eq('id_curso', cursoId)
           .order('fecha_creacion', { ascending: false });
         
@@ -129,7 +146,14 @@ export default function AlumnoDashboard() {
   };
 
   if (isLoading) {
-    return <div className="flex-1 flex items-center justify-center p-8 bg-gray-50 dark:bg-gray-900"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando Resumen Escolar...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
