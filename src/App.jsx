@@ -28,6 +28,9 @@ import ProfesorTareas from './pages/profesor/ProfesorTareas';
 import ProfesorTareasNueva from './pages/profesor/ProfesorTareasNueva';
 import ProfesorCopiloto from './pages/profesor/ProfesorCopiloto';
 import ProfesorPlanificaciones from './pages/profesor/ProfesorPlanificaciones';
+import ProfesorJefatura from './pages/profesor/ProfesorJefatura';
+import ProfesorLeccionario from './pages/profesor/ProfesorLeccionario';
+import ProfesorHorario from './pages/profesor/ProfesorHorario';
 import AlumnoDashboard from './pages/alumno/AlumnoDashboard';
 import AlumnoCalificaciones from './pages/alumno/AlumnoCalificaciones';
 import AlumnoAsistencia from './pages/alumno/AlumnoAsistencia';
@@ -133,6 +136,9 @@ function App() {
             <Route path="/panel/profesor/copiloto" element={<ProfesorCopiloto />} />
             {/* NUEVA RUTA AQUÍ */}
             <Route path="/panel/profesor/planificaciones" element={<ProfesorPlanificaciones />} />
+            <Route path="/panel/profesor/jefatura" element={<ProfesorJefatura />} />
+            <Route path="/panel/profesor/leccionario" element={<ProfesorLeccionario />} />
+            <Route path="/panel/profesor/horario" element={<ProfesorHorario />} />
             {/* RUTAS PARA VER PERFILES DESDE EL BUSCADOR (Comparten componente con Director) */}
             <Route path="/panel/profesor/perfil-usuario/:rut" element={<DirectorFichaAlumno />} />
             <Route path="/panel/profesor/ficha-docente" element={<DirectorFichaDocente />} />

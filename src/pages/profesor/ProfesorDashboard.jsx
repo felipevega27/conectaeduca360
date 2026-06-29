@@ -4,6 +4,7 @@ import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { sortCursos } from '../../utils/sortUtils';
 
 export default function ProfesorDashboard() {
   const navigate = useNavigate();
@@ -17,11 +18,13 @@ export default function ProfesorDashboard() {
   });
 
   const [clasesHoy, setClasesHoy] = useState([]);
+  const [feriadoHoy, setFeriadoHoy] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Estados para el Modal de Jefatura
   const [isModalJefaturaOpen, setIsModalJefaturaOpen] = useState(false);
   const [alumnosJefatura, setAlumnosJefatura] = useState([]);
+  const [alumnosEnRiesgo, setAlumnosEnRiesgo] = useState([]);
 
   // Estados para Muro de Anuncios (Blog)
   const [misCursos, setMisCursos] = useState([]);
@@ -56,14 +59,20 @@ export default function ProfesorDashboard() {
         .maybeSingle();
 
       if (cursoJefatura) {
-        // Contar alumnos en riesgo (con más de 1 inasistencia)
-        const { data: asistencias } = await supabase.from('asistencia_alumnos').select('rut_alumno').eq('id_curso', cursoJefatura.id).eq('estado', 'Ausente');
-        const alumnosRiesgoSet = new Set(asistencias?.map(a => a.rut_alumno) || []);
+        // Contar alumnos en riesgo (con más de 1 inasistencia) o bajo promedio
+        const { data: asistencias } = await supabase.from('asistencia_alumnos').select('rut_alumno, estado').eq('id_curso', cursoJefatura.id).eq('estado', 'Ausente');
+        
+        const ausenciasCount = {};
+        asistencias?.forEach(a => {
+            ausenciasCount[a.rut_alumno] = (ausenciasCount[a.rut_alumno] || 0) + 1;
+        });
+        
+        const rutsRiesgo = Object.keys(ausenciasCount).filter(rut => ausenciasCount[rut] >= 2);
         
         setProfesorJefe({
           idCurso: cursoJefatura.id,
           curso: cursoJefatura.nombre,
-          alumnosRiesgo: alumnosRiesgoSet.size,
+          alumnosRiesgo: rutsRiesgo.length,
           avancePlanificacion: 0
         });
 
@@ -87,6 +96,13 @@ export default function ProfesorDashboard() {
           });
           lista.sort((a,b) => a.nombre.localeCompare(b.nombre));
           setAlumnosJefatura(lista);
+          
+          // Llenar lista de riesgo
+          const riesgoLista = lista.filter(a => rutsRiesgo.includes(a.rut)).map(a => ({
+              ...a,
+              motivo: `${ausenciasCount[a.rut]} ausencias consecutivas`
+          }));
+          setAlumnosEnRiesgo(riesgoLista);
         }
       }
 
@@ -102,59 +118,76 @@ export default function ProfesorDashboard() {
       
       setProfesorJefe(prev => ({ ...prev, avancePlanificacion: avanceCalculado }));
 
-      // 2. Obtener Clases de Hoy desde 'horarios'
+      // 2. Obtener Clases de Hoy desde 'horarios' o verificar Feriado
       const diaHoy = getDiaHoy();
-      const { data: horariosHoy } = await supabase
-        .from('horarios')
-        .select('*, cursos(nombre), asignaturas(nombre)')
-        .eq('rut_profesor', rutProfesor)
-        .eq('dia_semana', diaHoy)
-        .order('hora_inicio', { ascending: true });
+      const hoy = new Date();
+      const yyyy = hoy.getFullYear();
+      const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+      const dd = String(hoy.getDate()).padStart(2, '0');
+      const hoyIso = `${yyyy}-${mm}-${dd}`;
 
-      if (horariosHoy && horariosHoy.length > 0) {
-        // Obtener los leccionarios de hoy para ver cuáles están firmados
-        const hoyISO = new Date().toISOString().split('T')[0];
-        const horariosIds = horariosHoy.map(h => h.id);
-        const { data: leccionarios } = await supabase
-          .from('leccionarios')
-          .select('id_horario, firmado')
-          .in('id_horario', horariosIds)
-          .eq('fecha', hoyISO);
+      const { data: feriadosList } = await supabase
+        .from('feriados')
+        .select('*');
 
-        const leccionariosMap = {};
-        leccionarios?.forEach(lec => {
-          leccionariosMap[lec.id_horario] = lec.firmado;
-        });
+      const feriado = feriadosList?.find(f => f.fecha && f.fecha.startsWith(hoyIso));
 
-        // Formatear las clases para el estado
-        const ahora = new Date();
-        const horaActualStr = ahora.getHours().toString().padStart(2, '0') + ':' + ahora.getMinutes().toString().padStart(2, '0');
-
-        const clasesFormateadas = horariosHoy.map(h => {
-          let estado = 'Pendiente';
-          if (horaActualStr >= h.hora_inicio && horaActualStr <= h.hora_fin) {
-            estado = 'En Curso';
-          } else if (horaActualStr > h.hora_fin || leccionariosMap[h.id]) {
-            estado = 'Finalizada';
-          }
-
-          return {
-            id: h.id, // ID del horario
-            id_curso: h.id_curso,
-            id_asignatura: h.id_asignatura,
-            bloque: h.bloque,
-            hora: `${h.hora_inicio.substring(0, 5)} - ${h.hora_fin.substring(0, 5)}`,
-            curso: h.cursos?.nombre || 'Curso Desconocido',
-            asignatura: h.asignaturas?.nombre || 'Asignatura Desconocida',
-            sala: h.sala || 'Sala Asignada',
-            estado: estado,
-            leccionarioFirmado: !!leccionariosMap[h.id]
-          };
-        });
-
-        setClasesHoy(clasesFormateadas);
-      } else {
+      if (feriado) {
+        setFeriadoHoy(feriado);
         setClasesHoy([]);
+      } else {
+        setFeriadoHoy(null);
+        
+        const { data: horariosHoy } = await supabase
+          .from('horarios')
+          .select('*, cursos(nombre), asignaturas(nombre)')
+          .eq('rut_profesor', rutProfesor)
+          .eq('dia_semana', diaHoy)
+          .order('hora_inicio', { ascending: true });
+
+        if (horariosHoy && horariosHoy.length > 0) {
+          // Obtener los leccionarios de hoy para ver cuáles están firmados
+          const horariosIds = horariosHoy.map(h => h.id);
+          const { data: leccionarios } = await supabase
+            .from('leccionarios')
+            .select('id_horario, firmado')
+            .in('id_horario', horariosIds)
+            .eq('fecha', hoyIso);
+
+          const leccionariosMap = {};
+          leccionarios?.forEach(lec => {
+            leccionariosMap[lec.id_horario] = lec.firmado;
+          });
+
+          // Formatear las clases para el estado
+          const horaActualStr = hoy.getHours().toString().padStart(2, '0') + ':' + hoy.getMinutes().toString().padStart(2, '0');
+
+          const clasesFormateadas = horariosHoy.map(h => {
+            let estado = 'Pendiente';
+            if (horaActualStr >= h.hora_inicio && horaActualStr <= h.hora_fin) {
+              estado = 'En Curso';
+            } else if (horaActualStr > h.hora_fin || leccionariosMap[h.id]) {
+              estado = 'Finalizada';
+            }
+
+            return {
+              id: h.id, // ID del horario
+              id_curso: h.id_curso,
+              id_asignatura: h.id_asignatura,
+              bloque: h.bloque,
+              hora: `${h.hora_inicio.substring(0, 5)} - ${h.hora_fin.substring(0, 5)}`,
+              curso: h.cursos?.nombre || 'Curso Desconocido',
+              asignatura: h.asignaturas?.nombre || 'Asignatura Desconocida',
+              sala: h.sala || 'Sala Asignada',
+              estado: estado,
+              leccionarioFirmado: !!leccionariosMap[h.id]
+            };
+          });
+
+          setClasesHoy(clasesFormateadas);
+        } else {
+          setClasesHoy([]);
+        }
       }
 
       // 3. Obtener Cursos donde el profesor hace clases (para el Muro de Anuncios)
@@ -171,7 +204,7 @@ export default function ProfesorDashboard() {
           }
         });
         const cursosList = Array.from(uniqueCursosMap, ([id, nombre]) => ({ id, nombre }));
-        setMisCursos(cursosList);
+        setMisCursos(sortCursos(cursosList));
       }
 
       // 4. Cargar Anuncios del Profesor
@@ -493,6 +526,35 @@ export default function ProfesorDashboard() {
 
       </div>
 
+      {/* ALERTAS TEMPRANAS S.A.T */}
+      {alumnosEnRiesgo.length > 0 && (
+        <div className="mb-8">
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2 mb-4">
+                <span className="text-red-500">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                </span>
+                Sistema de Alerta Temprana (S.A.T.)
+                <span className="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-xs px-2 py-0.5 rounded-full">{alumnosEnRiesgo.length}</span>
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {alumnosEnRiesgo.map((alumno, idx) => (
+                    <div key={idx} className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-red-200 dark:border-red-900/50 shadow-sm relative overflow-hidden flex items-start gap-4">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-red-500"></div>
+                        <div className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400 shrink-0 font-bold uppercase">
+                            {alumno.nombre.charAt(0)}
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-gray-800 dark:text-white text-sm line-clamp-1">{alumno.nombre}</h4>
+                            <p className="text-xs text-red-600 dark:text-red-400 mt-1 font-medium">{alumno.motivo}</p>
+                            <button className="text-xs text-gray-500 hover:text-blue-600 mt-2 transition-colors font-medium">Ver Ficha →</button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+      )}
+
       {/* CRONOGRAMA / HORARIO DE HOY */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 flex items-center justify-between">
@@ -504,7 +566,13 @@ export default function ProfesorDashboard() {
         </div>
 
         <div className="p-6 space-y-4">
-          {clasesHoy.length > 0 && clasesHoy.map((clase) => (
+          {feriadoHoy ? (
+            <div className="flex flex-col items-center justify-center py-8 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl border border-dashed border-emerald-200 dark:border-emerald-800 animate-fade-in-up">
+              <span className="text-4xl mb-3 block">🏖️</span>
+              <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-300">¡Es Feriado!</h3>
+              <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1 capitalize text-center px-4">{feriadoHoy.nombre}</p>
+            </div>
+          ) : clasesHoy.length > 0 ? clasesHoy.map((clase) => (
             <div 
               key={clase.id} 
               className={`border rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
@@ -564,12 +632,11 @@ export default function ProfesorDashboard() {
                 
               </div>
             </div>
-          ))}
-        {clasesHoy.length === 0 && (
-          <div className="p-8 text-center text-gray-500">
-            <p className="text-sm font-medium">No tienes clases asignadas para el día de hoy.</p>
-          </div>
-        )}
+          )) : (
+            <div className="p-8 text-center text-gray-500">
+              <p className="text-sm font-medium">No tienes clases asignadas para el día de hoy.</p>
+            </div>
+          )}
         </div>
       </div>
 

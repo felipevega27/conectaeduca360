@@ -51,9 +51,9 @@ export default function AlumnoDashboard() {
         .select('estado')
         .eq('rut_alumno', rutAlumno);
       
-      let porcentajeAsistencia = 100;
+      let porcentajeAsistencia = 0;
       if (asistencias && asistencias.length > 0) {
-        const presentes = asistencias.filter(a => a.estado.toLowerCase() === 'presente').length;
+        const presentes = asistencias.filter(a => a.estado.toLowerCase() === 'presente' || a.estado.toLowerCase() === 'atrasado').length;
         porcentajeAsistencia = Math.round((presentes / asistencias.length) * 100);
       }
 

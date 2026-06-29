@@ -35,6 +35,9 @@ export default function ProfesorAsistencia() {
     const [isFichaDrawerOpen, setIsFichaDrawerOpen] = useState(false);
     const [rutFichaSeleccionada, setRutFichaSeleccionada] = useState(null);
 
+    // Estado para Feriado
+    const [feriadoHoy, setFeriadoHoy] = useState(null);
+
     // Obtener el día de la semana actual en español
     const getDiaHoy = () => {
         const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -55,6 +58,27 @@ export default function ProfesorAsistencia() {
             const loggedUser = JSON.parse(localStorage.getItem('userLogged'));
             const rutProfesor = loggedUser.rut;
             const diaHoy = getDiaHoy();
+
+            // 0. Verificar Feriado de Hoy
+            const hoy = new Date();
+            const yyyy = hoy.getFullYear();
+            const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+            const dd = String(hoy.getDate()).padStart(2, '0');
+            const hoyIso = `${yyyy}-${mm}-${dd}`;
+
+            const { data: feriadosList } = await supabase
+                .from('feriados')
+                .select('*');
+
+            const feriado = feriadosList?.find(f => f.fecha && f.fecha.startsWith(hoyIso));
+
+            if (feriado) {
+                setFeriadoHoy(feriado);
+                setClasesHoy([]);
+                return; // Cortar aquí, no buscar horarios
+            } else {
+                setFeriadoHoy(null);
+            }
 
             const { data: horariosHoy } = await supabase
                 .from('horarios')
@@ -326,6 +350,13 @@ export default function ProfesorAsistencia() {
                         <SkeletonCard />
                         <SkeletonCard />
                         <SkeletonCard />
+                    </div>
+                ) : feriadoHoy ? (
+                    <div className="bg-emerald-50 dark:bg-emerald-900/10 p-8 rounded-2xl shadow-sm border border-emerald-200 dark:border-emerald-800 text-center max-w-md mx-auto mt-10 animate-fade-in-up">
+                        <span className="text-5xl mb-4 block">🏖️</span>
+                        <h2 className="text-xl font-bold text-emerald-800 dark:text-emerald-300 mb-2">¡Es Feriado!</h2>
+                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 capitalize">{feriadoHoy.nombre}</p>
+                        <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 mt-3 font-medium">No hay clases programadas. No es necesario pasar asistencia hoy.</p>
                     </div>
                 ) : clasesHoy.length === 0 ? (
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 text-center max-w-md mx-auto mt-10">

@@ -14,6 +14,8 @@ export default function ProfesorLayout() {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  const [isJefe, setIsJefe] = useState(false);
+
   // Estado para el modo oscuro
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -28,9 +30,9 @@ export default function ProfesorLayout() {
     if (loggedUserJSON) {
       const parsedUser = JSON.parse(loggedUserJSON);
       setUser(parsedUser);
-      
-      // Fetch fresh avatar
-      const fetchAvatar = async () => {
+
+      // Fetch fresh avatar and jefatura
+      const fetchUserData = async () => {
         try {
           const { data } = await supabase.from('perfiles').select('avatar_url').eq('rut', parsedUser.rut || parsedUser.id).single();
           if (data && data.avatar_url) {
@@ -38,11 +40,17 @@ export default function ProfesorLayout() {
           } else if (parsedUser.avatar_url) {
             setAvatarLayout(parsedUser.avatar_url);
           }
+
+          // Check jefatura
+          const { data: cursoJefatura } = await supabase.from('cursos').select('id').eq('rut_profesor_jefe', parsedUser.rut || parsedUser.id).maybeSingle();
+          if (cursoJefatura) {
+            setIsJefe(true);
+          }
         } catch (e) {
-          console.error("Error fetching avatar for layout", e);
+          console.error("Error fetching user data for layout", e);
         }
       };
-      fetchAvatar();
+      fetchUserData();
     } else {
       // Obtenemos el profesor de nuestro archivo de prueba si no hay sesión
       const fallbackUser = mockUsers.find(u => u.role === 'profesor');
@@ -123,7 +131,7 @@ export default function ProfesorLayout() {
           <div className={`items-center justify-center cursor-pointer ${isCollapsed ? 'hidden lg:flex' : 'hidden'}`} onClick={() => { navigate('/panel/profesor'); setIsMobileMenuOpen(false); }}>
             <img src={logoImg} alt="Logo" className="h-12 w-12 object-contain transition-transform hover:scale-105" />
           </div>
-          
+
           <button onClick={() => setIsMobileMenuOpen(false)} className="text-gray-500 hover:text-gray-600 lg:hidden shrink-0">
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -137,20 +145,47 @@ export default function ProfesorLayout() {
             <h2 className={`text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 ${isCollapsed ? 'hidden' : 'block'}`}>Panel Docente</h2>
             <nav className="space-y-1.5">
 
-              {/* Inicio / Mi Horario */}
+              {/* Inicio / Panel Principal */}
               <button
                 onClick={() => { navigate('/panel/profesor'); setIsMobileMenuOpen(false); }}
-                title={isCollapsed ? "Mi Horario" : ""}
+                title={isCollapsed ? "Panel Principal" : ""}
                 className={`w-full flex items-center py-2.5 text-sm font-medium rounded-lg transition-colors ${isCollapsed ? 'justify-center px-0' : 'px-4'} ${isItemActive('/panel/profesor', true)
                   ? 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/20'
                   : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
               >
                 <svg className={`h-5 w-5 shrink-0 ${isCollapsed ? '' : 'mr-3'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
-                {!isCollapsed && <span>Mi Horario (Hoy)</span>}
+                {!isCollapsed && <span>Panel Principal</span>}
               </button>
+
+              <button
+                onClick={() => { navigate('/panel/profesor/horario'); setIsMobileMenuOpen(false); }}
+                title={isCollapsed ? "Horario Semanal" : ""}
+                className={`w-full flex items-center py-2.5 text-sm font-medium rounded-lg transition-colors ${isCollapsed ? 'justify-center px-0' : 'px-4'} ${isItemActive('/panel/profesor/horario', true)
+                  ? 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/20'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+              >
+                <svg className={`h-5 w-5 shrink-0 ${isCollapsed ? '' : 'mr-3'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                {!isCollapsed && <span>Horario Semanal</span>}
+              </button>
+
+              {/* Mi Jefatura (Solo si es profesor jefe) */}
+              {isJefe && (
+                <button
+                  onClick={() => { navigate('/panel/profesor/jefatura'); setIsMobileMenuOpen(false); }}
+                  title={isCollapsed ? "Mi Curso" : ""}
+                  className={`w-full flex items-center py-2.5 text-sm font-medium rounded-lg transition-colors ${isCollapsed ? 'justify-center px-0' : 'px-4'} ${isItemActive('/panel/profesor/jefatura', true)
+                    ? 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/20'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                >
+                  <svg className={`h-5 w-5 shrink-0 ${isCollapsed ? '' : 'mr-3'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                  {!isCollapsed && <span>Mi Curso</span>}
+                </button>
+              )}
 
               {/* Libro de Clases (Desplegable) */}
               <div className="relative pt-2">
@@ -195,6 +230,13 @@ export default function ProfesorLayout() {
                       className={`w-full flex items-center py-2 text-sm rounded-lg transition-colors ${isCollapsed ? 'justify-center px-0' : 'px-3 text-left'} ${isItemActive('/panel/profesor/anotaciones') ? 'text-blue-600 font-medium bg-blue-50/50 dark:text-blue-400 dark:bg-blue-900/20' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                     >
                       {isCollapsed ? <span className="font-bold text-xs uppercase">AN</span> : <span>Hoja de Vida</span>}
+                    </button>
+                    <button
+                      onClick={() => { navigate('/panel/profesor/leccionario'); setIsMobileMenuOpen(false); }}
+                      title={isCollapsed ? "Leccionario" : ""}
+                      className={`w-full flex items-center py-2 text-sm rounded-lg transition-colors ${isCollapsed ? 'justify-center px-0' : 'px-3 text-left'} ${isItemActive('/panel/profesor/leccionario') ? 'text-blue-600 font-medium bg-blue-50/50 dark:text-blue-400 dark:bg-blue-900/20' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                    >
+                      {isCollapsed ? <span className="font-bold text-xs uppercase">LE</span> : <span>Leccionario</span>}
                     </button>
                   </div>
                 </div>

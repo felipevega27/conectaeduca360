@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import BackdropLoader from '../../components/BackdropLoader';
 import { SkeletonCard } from '../../components/SkeletonLoader';
 import { perteneceAlSemestre } from '../../utils/dateUtils';
+import { sortCursos } from '../../utils/sortUtils';
 
 export default function ProfesorTareas() {
   const [user, setUser] = useState(null);
@@ -32,8 +33,8 @@ export default function ProfesorTareas() {
   const [tareas, setTareas] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Filtros dinámicos: Solo los cursos del profesor, únicos y ordenados alfabéticamente
-  const misCursos = ['Todos', ...Array.from(new Set(asignaturasProfesor.map(a => a.cursos?.nombre).filter(Boolean))).sort()];
+  // Filtros dinámicos: Solo los cursos del profesor, únicos y ordenados correctamente
+  const misCursos = ['Todos', ...sortCursos(Array.from(new Set(asignaturasProfesor.map(a => a.cursos?.nombre).filter(Boolean))))];
 
   useEffect(() => {
     const loggedUserJSON = localStorage.getItem('userLogged');
@@ -64,7 +65,7 @@ export default function ProfesorTareas() {
       const { data, error } = await supabase
         .from('tareas')
         .select(`
-          id, titulo, descripcion, fecha_entrega, estado, id_curso,
+          id, titulo, descripcion, fecha_entrega, estado, id_curso, created_at,
           cursos(nombre, matriculas(rut_alumno)),
           asignaturas(nombre),
           entregas_tareas(id)
@@ -75,7 +76,7 @@ export default function ProfesorTareas() {
       if (error) throw error;
 
       if (data) {
-        const tareasFiltradas = data.filter(t => perteneceAlSemestre(t.fecha_entrega, semestreActivo));
+        const tareasFiltradas = data.filter(t => perteneceAlSemestre(t.fecha_entrega || t.created_at, semestreActivo));
 
         const tareasMapeadas = tareasFiltradas.map(t => ({
           id: t.id,
@@ -353,23 +354,29 @@ export default function ProfesorTareas() {
               return (
                 <div key={tarea.id} className="group relative border border-gray-100 dark:border-gray-700/60 rounded-2xl p-6 bg-white dark:bg-gray-800/80 backdrop-blur-sm flex flex-col h-full shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
                   <div className="flex justify-between items-center mb-4">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${tarea.estado === 'Activa' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 border border-gray-200 dark:border-gray-600'}`}>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${tarea.estado === 'Activa' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]' : tarea.estado === 'Material de Estudio' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 border border-gray-200 dark:border-gray-600'}`}>
                       {tarea.estado === 'Activa' && <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>}
                       {tarea.estado}
                     </span>
-                    <span className="text-xs font-bold text-gray-400 dark:text-gray-500">{porcentaje}% Entregado</span>
+                    {tarea.estado !== 'Material de Estudio' && (
+                      <span className="text-xs font-bold text-gray-400 dark:text-gray-500">{porcentaje}% Entregado</span>
+                    )}
                   </div>
                   <h3 className="font-extrabold text-gray-800 dark:text-white text-lg tracking-tight leading-tight mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{tarea.titulo}</h3>
                   <p className="text-xs text-gray-400 font-medium mb-5">{tarea.curso} <span className="mx-1 opacity-50">•</span> {tarea.asignatura}</p>
                   
                   <div className="mt-auto space-y-3">
-                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-900/30 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700/50">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                      <span>Vence: <b className="text-gray-700 dark:text-gray-300 ml-1">{formatDate(tarea.fechaEntrega)}</b></span>
-                    </div>
-                    <button onClick={() => abrirDetalles(tarea)} className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-bold rounded-xl shadow-md shadow-blue-500/25 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2">
-                      Revisar Entregas
-                      <span className="bg-white/20 px-2 py-0.5 rounded-md text-xs">{tarea.entregas}/{tarea.total}</span>
+                    {tarea.estado !== 'Material de Estudio' && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-900/30 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700/50">
+                        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        <span>Vence: <b className="text-gray-700 dark:text-gray-300 ml-1">{formatDate(tarea.fechaEntrega)}</b></span>
+                      </div>
+                    )}
+                    <button onClick={() => abrirDetalles(tarea)} className={`w-full py-2.5 text-white text-sm font-bold rounded-xl shadow-md transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 ${tarea.estado === 'Material de Estudio' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-500/25' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25'}`}>
+                      {tarea.estado === 'Material de Estudio' ? 'Ver Material' : 'Revisar Entregas'}
+                      {tarea.estado !== 'Material de Estudio' && (
+                        <span className="bg-white/20 px-2 py-0.5 rounded-md text-xs">{tarea.entregas}/{tarea.total}</span>
+                      )}
                     </button>
                   </div>
                 </div>

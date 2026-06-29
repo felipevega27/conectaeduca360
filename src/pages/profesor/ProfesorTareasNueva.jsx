@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import logoTexto from '../../assets/logo_texto.png';
 import BackdropLoader from '../../components/BackdropLoader';
 import { notificarCurso } from '../../utils/notificacionesUtils';
+import { sortCursos } from '../../utils/sortUtils';
 
 export default function ProfesorTareasNueva() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function ProfesorTareasNueva() {
 
   // INTERRUPTOR INTELIGENTE
   const [modoCreacion, setModoCreacion] = useState('evaluacion');
+  const [pasoActual, setPasoActual] = useState(1);
 
   // Estados Formulario Común
   const [tituloForm, setTituloForm] = useState('');
@@ -58,7 +60,8 @@ export default function ProfesorTareasNueva() {
       .eq('rut_profesor', rutProfesor);
 
     if (data && data.length > 0) {
-      const unicas = data.filter((v, i, a) => a.findIndex(v2 => (v2.id_curso === v.id_curso && v2.nombre === v.nombre)) === i);
+      let unicas = data.filter((v, i, a) => a.findIndex(v2 => (v2.id_curso === v.id_curso && v2.nombre === v.nombre)) === i);
+      unicas = sortCursos(unicas);
       setMisAsignaturas(unicas);
       setSelectedAsignaturaId(unicas[0].id.toString());
     }
@@ -323,7 +326,7 @@ export default function ProfesorTareasNueva() {
         setTimeout(() => navigate('/panel/profesor/calificaciones'), 1500);
 
       } else {
-        if (!fechaForm) {
+        if (modoCreacion === 'tarea' && !fechaForm) {
           toast.error("La fecha límite de entrega es obligatoria para las tareas.", { id: toastId });
           setIsSaving(false); return;
         }
@@ -333,8 +336,8 @@ export default function ProfesorTareasNueva() {
           id_curso: asignaturaSeleccionada.id_curso,
           id_asignatura: parseInt(selectedAsignaturaId),
           rut_profesor: user.rut,
-          fecha_entrega: fechaForm,
-          estado: 'Activa',
+          fecha_entrega: modoCreacion === 'tarea' ? fechaForm : null,
+          estado: modoCreacion === 'material' ? 'Material de Estudio' : 'Activa',
           archivo_url: archivoUrlGuardado // <-- EL LINK DEL ARCHIVO SE GUARDA AQUÍ
         }]);
         if (error) throw error;
@@ -344,12 +347,12 @@ export default function ProfesorTareasNueva() {
           asignaturaSeleccionada.id_curso, 
           ['alumno', 'apoderado'],
           'alerta', 
-          'Nueva Tarea Asignada', 
-          `El profesor ${user?.nombre || user?.rut} ha asignado la tarea: "${tituloForm.trim()}" en ${asignaturaSeleccionada.nombre}.`,
+          modoCreacion === 'material' ? 'Nuevo Material de Estudio' : 'Nueva Tarea Asignada', 
+          `El profesor ${user?.nombre || user?.rut} ha subido ${modoCreacion === 'material' ? 'el material' : 'la tarea'}: "${tituloForm.trim()}" en ${asignaturaSeleccionada.nombre}.`,
           null
         );
 
-        toast.success('Tarea formativa publicada correctamente.', { id: toastId });
+        toast.success(modoCreacion === 'material' ? 'Material de estudio publicado.' : 'Tarea formativa publicada correctamente.', { id: toastId });
         setTimeout(() => navigate('/panel/profesor/tareas'), 1500);
       }
     } catch (error) {
@@ -398,98 +401,148 @@ export default function ProfesorTareasNueva() {
           <BackdropLoader mensaje="Guardando cambios..." />
         )}
 
-        {/* INTERRUPTOR INTELIGENTE */}
-        <div className="flex bg-gray-100 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700/50">
-          <button
-            type="button"
-            onClick={() => setModoCreacion('evaluacion')}
-            className={`flex-1 py-3 px-4 text-sm font-bold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 ${modoCreacion === 'evaluacion' ? 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-          >
-            📋 Crear Evaluación
-          </button>
-          <button
-            type="button"
-            onClick={() => setModoCreacion('tarea')}
-            className={`flex-1 py-3 px-4 text-sm font-bold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 ${modoCreacion === 'tarea' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-          >
-            📝 Crear Tarea
-          </button>
+        {/* STEPPER HEADER */}
+        <div className="flex justify-between items-center mb-8 relative px-4 sm:px-12">
+          <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-gray-200 dark:bg-gray-700 rounded-full z-0"></div>
+          <div className={`absolute left-10 top-1/2 -translate-y-1/2 h-1 bg-indigo-500 rounded-full z-0 transition-all duration-500`} style={{ width: pasoActual === 1 ? '0%' : pasoActual === 2 ? '50%' : 'calc(100% - 5rem)' }}></div>
+          
+          <div className={`relative z-10 flex flex-col items-center gap-2 ${pasoActual >= 1 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${pasoActual >= 1 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>1</div>
+            <span className="text-xs font-bold hidden sm:block">Datos Básicos</span>
+          </div>
+          
+          <div className={`relative z-10 flex flex-col items-center gap-2 ${pasoActual >= 2 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${pasoActual >= 2 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>2</div>
+            <span className="text-xs font-bold hidden sm:block">Configuración</span>
+          </div>
+          
+          <div className={`relative z-10 flex flex-col items-center gap-2 ${pasoActual >= 3 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${pasoActual >= 3 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>3</div>
+            <span className="text-xs font-bold hidden sm:block">Contenido</span>
+          </div>
         </div>
 
         <form onSubmit={handleGuardar} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">{modoCreacion === 'evaluacion' ? 'Título de la Evaluación *' : 'Título de la Tarea *'}</label>
-              <input required type="text" maxLength={60} placeholder={modoCreacion === 'evaluacion' ? "Ej: Prueba Coef 1: Geometría y Álgebra" : "Ej: Trabajo de Investigación: Revolución Industrial"} value={tituloForm} onChange={(e) => setTituloForm(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-800 dark:text-white transition-all" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Asignatura y Curso *</label>
-              <select required value={selectedAsignaturaId} onChange={(e) => setSelectedAsignaturaId(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-800 dark:text-white transition-all">
-                {misAsignaturas.map(a => <option key={a.id} value={a.id}>{a.cursos?.nombre} - {a.nombre}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">{modoCreacion === 'evaluacion' ? 'Fecha Programada' : 'Fecha Límite de Entrega *'}</label>
-              <input type="date" required={modoCreacion === 'tarea'} value={fechaForm} onChange={(e) => setFechaForm(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-800 dark:text-white transition-all" />
-            </div>
-          </div>
-
-          {/* --- ESTO REEMPLAZA A TU BLOQUE DE PARÁMETROS CURRICULARES --- */}
-          {modoCreacion === 'evaluacion' ? (
-            <div className="p-6 bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/30 rounded-2xl space-y-5 animate-fade-in">
-              <h3 className="font-bold text-indigo-800 dark:text-indigo-300 text-sm uppercase flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                Parámetros del Libro de Clases
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Semestre</label>
-                  <select value={semestreForm} onChange={(e) => setSemestreForm(e.target.value)} className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all">
-                    <option value="Primer Semestre">1º Semestre</option>
-                    <option value="Segundo Semestre">2º Semestre</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Tipo de Evaluación</label>
-                  <select value={tipoEvaluacion} onChange={(e) => setTipoEvaluacion(e.target.value)} className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all">
-                    <option value="Formativa">Formativa</option>
-                    <option value="Sumativa">Sumativa</option>
-                    <option value="Diagnóstica">Diagnóstica</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Instrumento a Usar</label>
-                  <select value={tipoInstrumento} onChange={(e) => setTipoInstrumento(e.target.value)} className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all">
-                    <option value="Prueba de Desarrollo">Prueba de Desarrollo</option>
-                    <option value="Prueba de Selección Múltiple">Prueba Selección Múltiple</option>
-                    <option value="Rúbrica Analítica">Rúbrica Analítica</option>
-                    <option value="Lista de Cotejo">Lista de Cotejo</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Ponderación (%)</label>
-                  <input type="number" min="1" max="100" placeholder="Ej: 20" value={porcentaje} onChange={(e) => setPorcentaje(e.target.value)} className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Objetivo de Apdz.</label>
-                  <input type="text" placeholder="Ej: OA 04..." value={oaEvaluado} onChange={(e) => setOaEvaluado(e.target.value)} className="w-full p-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all" />
-                </div>
+          
+          {pasoActual === 1 && (
+            <div className="space-y-6 animate-fade-in">
+              {/* INTERRUPTOR INTELIGENTE */}
+              <div className="flex bg-gray-100 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700/50 flex-col sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => setModoCreacion('evaluacion')}
+                  className={`flex-1 py-3 px-4 text-sm font-bold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 ${modoCreacion === 'evaluacion' ? 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                >
+                  📋 Crear Evaluación
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoCreacion('tarea')}
+                  className={`flex-1 py-3 px-4 text-sm font-bold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 ${modoCreacion === 'tarea' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                >
+                  📝 Crear Tarea
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoCreacion('material')}
+                  className={`flex-1 py-3 px-4 text-sm font-bold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 ${modoCreacion === 'material' ? 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                >
+                  📚 Material de Estudio
+                </button>
               </div>
-            </div>
-          ) : (
-            <div className="p-6 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-2xl">
-              <h3 className="font-bold text-blue-800 dark:text-blue-300 text-sm uppercase flex items-center gap-2 mb-3">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                Configuración de Tarea Formativa
-              </h3>
-              <p className="text-xs text-blue-600 dark:text-blue-400">
-                Esta actividad no afectará el promedio final. Es un recurso de práctica para tus estudiantes.
-              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">{modoCreacion === 'evaluacion' ? 'Título de la Evaluación *' : modoCreacion === 'tarea' ? 'Título de la Tarea *' : 'Título del Material *'}</label>
+                  <input required type="text" maxLength={60} placeholder={modoCreacion === 'evaluacion' ? "Ej: Prueba Coef 1: Geometría y Álgebra" : modoCreacion === 'tarea' ? "Ej: Trabajo de Investigación: Revolución Industrial" : "Ej: Apuntes de Geometría"} value={tituloForm} onChange={(e) => setTituloForm(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none text-gray-800 dark:text-white transition-all shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Asignatura y Curso *</label>
+                  <select required value={selectedAsignaturaId} onChange={(e) => setSelectedAsignaturaId(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none text-gray-800 dark:text-white transition-all shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+                    {misAsignaturas.map(a => <option key={a.id} value={a.id}>{a.cursos?.nombre} - {a.nombre}</option>)}
+                  </select>
+                </div>
+                {modoCreacion !== 'material' && (
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">{modoCreacion === 'evaluacion' ? 'Fecha Programada' : 'Fecha Límite de Entrega *'}</label>
+                    <input type="date" required={modoCreacion === 'tarea'} value={fechaForm} onChange={(e) => setFechaForm(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none text-gray-800 dark:text-white transition-all shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800" />
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-3 border-b border-gray-200 dark:border-gray-700 pb-3">
+          {/* --- ESTO REEMPLAZA A TU BLOQUE DE PARÁMETROS CURRICULARES --- */}
+          {pasoActual === 2 && (
+            <div className="animate-fade-in">
+              {modoCreacion === 'evaluacion' ? (
+                <div className="p-6 bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/30 rounded-2xl space-y-5">
+                  <h3 className="font-bold text-indigo-800 dark:text-indigo-300 text-sm uppercase flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                    Parámetros del Libro de Clases
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Semestre</label>
+                      <select value={semestreForm} onChange={(e) => setSemestreForm(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 shadow-sm text-sm transition-all hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+                        <option value="Primer Semestre">1º Semestre</option>
+                        <option value="Segundo Semestre">2º Semestre</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Tipo de Evaluación</label>
+                      <select value={tipoEvaluacion} onChange={(e) => setTipoEvaluacion(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 shadow-sm text-sm transition-all hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+                        <option value="Formativa">Formativa</option>
+                        <option value="Sumativa">Sumativa</option>
+                        <option value="Diagnóstica">Diagnóstica</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Instrumento a Usar</label>
+                      <select value={tipoInstrumento} onChange={(e) => setTipoInstrumento(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 shadow-sm text-sm transition-all hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+                        <option value="Prueba de Desarrollo">Prueba de Desarrollo</option>
+                        <option value="Prueba de Selección Múltiple">Prueba Selección Múltiple</option>
+                        <option value="Rúbrica Analítica">Rúbrica Analítica</option>
+                        <option value="Lista de Cotejo">Lista de Cotejo</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Ponderación (%)</label>
+                      <input type="number" min="1" max="100" placeholder="Ej: 20" value={porcentaje} onChange={(e) => setPorcentaje(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 shadow-sm text-sm transition-all hover:bg-gray-50 dark:hover:bg-gray-800" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Objetivo de Apdz.</label>
+                      <input type="text" placeholder="Ej: OA 04..." value={oaEvaluado} onChange={(e) => setOaEvaluado(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 shadow-sm text-sm transition-all hover:bg-gray-50 dark:hover:bg-gray-800" />
+                    </div>
+                  </div>
+                </div>
+              ) : modoCreacion === 'tarea' ? (
+                <div className="p-6 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-2xl">
+                  <h3 className="font-bold text-blue-800 dark:text-blue-300 text-sm uppercase flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    Configuración de Tarea Formativa
+                  </h3>
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    Esta actividad no afectará el promedio final. Es un recurso de práctica para tus estudiantes.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-6 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-2xl">
+                  <h3 className="font-bold text-emerald-800 dark:text-emerald-300 text-sm uppercase flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                    Material de Estudio
+                  </h3>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                    Este material estará disponible para que los estudiantes lo descarguen y estudien a su propio ritmo. No requiere entrega ni fecha límite.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {pasoActual === 3 && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-3 border-b border-gray-200 dark:border-gray-700 pb-3">
               <div>
                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Cuerpo de la Actividad y Archivo Adjunto</label>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Sube el documento de la actividad o generalo de forma automática usando la IA.</p>
@@ -575,7 +628,7 @@ export default function ProfesorTareasNueva() {
                   </div>
                 ) : (
                   <textarea
-                    className="flex-1 w-full p-5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm text-gray-800 dark:text-white resize-none transition-all"
+                    className="flex-1 w-full p-5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none text-sm text-gray-800 dark:text-white resize-none transition-all shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800"
                     placeholder="Escribe instrucciones adicionales para los alumnos o genera un documento estructurado presionando el botón 'Redactar con IA'..."
                     onChange={(e) => setInstruccionesForm(e.target.value)}
                   ></textarea>
@@ -583,13 +636,31 @@ export default function ProfesorTareasNueva() {
               </div>
             </div>
           </div>
+          )}
 
-          <div className="pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-            <button type="button" onClick={() => navigate(-1)} className="px-5 py-2.5 rounded-xl text-gray-700 dark:text-gray-300 font-bold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm">Cancelar</button>
-            <button type="submit" disabled={isSaving} className={`px-6 py-2.5 rounded-xl text-white font-bold shadow-md transition-colors flex items-center gap-2 text-sm ${modoCreacion === 'evaluacion' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/30' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/30'}`}>
-              {isSaving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : null}
-              {isSaving ? "Guardando..." : (modoCreacion === 'evaluacion' ? 'Publicar en Libro de Clases' : 'Publicar Tarea en Plataforma')}
-            </button>
+          <div className="pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-between gap-3 mt-8">
+            {pasoActual > 1 ? (
+              <button type="button" onClick={() => setPasoActual(pasoActual - 1)} className="px-5 py-2.5 rounded-xl text-gray-700 dark:text-gray-300 font-bold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm">Atrás</button>
+            ) : (
+              <button type="button" onClick={() => navigate(-1)} className="px-5 py-2.5 rounded-xl text-gray-700 dark:text-gray-300 font-bold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm">Cancelar</button>
+            )}
+
+            {pasoActual < 3 ? (
+              <button type="button" onClick={() => {
+                if (pasoActual === 1) {
+                  if (!tituloForm.trim() || !selectedAsignaturaId || (modoCreacion === 'tarea' && !fechaForm)) {
+                    toast.error('Completa los campos obligatorios (*) para continuar.');
+                    return;
+                  }
+                }
+                setPasoActual(pasoActual + 1);
+              }} className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-600/30 transition-colors">Siguiente</button>
+            ) : (
+              <button type="submit" disabled={isSaving} className={`px-6 py-2.5 rounded-xl text-white font-bold shadow-md transition-colors flex items-center gap-2 text-sm ${modoCreacion === 'evaluacion' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/30' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/30'}`}>
+                {isSaving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : null}
+                {isSaving ? "Guardando..." : (modoCreacion === 'evaluacion' ? 'Publicar en Libro' : 'Publicar Tarea')}
+              </button>
+            )}
           </div>
         </form>
       </div>
@@ -625,7 +696,7 @@ export default function ProfesorTareasNueva() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">Nivel de Exigencia</label>
-                    <select value={iaDificultad} onChange={(e) => setIaDificultad(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none text-sm transition-all">
+                    <select value={iaDificultad} onChange={(e) => setIaDificultad(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm transition-all shadow-sm cursor-pointer">
                       <option>Básica (Recordar)</option>
                       <option>Intermedia (Aplicar)</option>
                       <option>Avanzada (Crear)</option>
@@ -633,7 +704,7 @@ export default function ProfesorTareasNueva() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">Tipo de Actividad</label>
-                    <select value={iaTipoTarea} onChange={(e) => setIaTipoTarea(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none text-sm transition-all">
+                    <select value={iaTipoTarea} onChange={(e) => setIaTipoTarea(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm transition-all shadow-sm cursor-pointer">
                       <option value="Guía de Ejercicios Paso a Paso">Guía de Ejercicios</option>
                       <option value="Pauta de Investigación">Pauta de Investigación</option>
                       <option value="Proyecto Práctico para la Casa">Proyecto Práctico</option>
@@ -645,7 +716,7 @@ export default function ProfesorTareasNueva() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">Exigencia Cognitiva</label>
-                    <select value={iaDificultad} onChange={(e) => setIaDificultad(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none text-sm transition-all">
+                    <select value={iaDificultad} onChange={(e) => setIaDificultad(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm transition-all shadow-sm cursor-pointer">
                       <option>Básica (Recordar)</option>
                       <option>Intermedia (Aplicar)</option>
                       <option>Avanzada (Evaluar)</option>
@@ -655,11 +726,11 @@ export default function ProfesorTareasNueva() {
                     <>
                       <div>
                         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">Cant. Preguntas</label>
-                        <input type="number" min="1" max="20" value={iaNumPreguntas} onChange={(e) => setIaNumPreguntas(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none text-sm transition-all" />
+                        <input type="number" min="1" max="20" value={iaNumPreguntas} onChange={(e) => setIaNumPreguntas(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm transition-all shadow-sm hover:bg-gray-50" />
                       </div>
                       <div className="col-span-2">
                         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">Formato del Instrumento</label>
-                        <select value={iaFormatoPregunta} onChange={(e) => setIaFormatoPregunta(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none text-sm transition-all">
+                        <select value={iaFormatoPregunta} onChange={(e) => setIaFormatoPregunta(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm transition-all shadow-sm cursor-pointer">
                           <option>Mixta (Alternativas y Desarrollo)</option>
                           <option>Solo Selección Múltiple</option>
                           <option>Solo Preguntas de Desarrollo</option>

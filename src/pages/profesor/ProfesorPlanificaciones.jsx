@@ -6,6 +6,7 @@ import BackdropLoader from '../../components/BackdropLoader';
 import { SkeletonCard, SkeletonBase } from '../../components/SkeletonLoader';
 import { notificarPorRol } from '../../utils/notificacionesUtils';
 import { perteneceAlSemestre } from '../../utils/dateUtils';
+import { sortCursos } from '../../utils/sortUtils';
 
 export default function ProfesorPlanificaciones() {
   const [user, setUser] = useState(null);
@@ -48,7 +49,8 @@ export default function ProfesorPlanificaciones() {
         .eq('rut_profesor', rut);
 
       if (data && data.length > 0) {
-        const unicas = data.filter((v, i, a) => a.findIndex(v2 => (v2.id_curso === v.id_curso && v2.nombre === v.nombre)) === i);
+        let unicas = data.filter((v, i, a) => a.findIndex(v2 => (v2.id_curso === v.id_curso && v2.nombre === v.nombre)) === i);
+        unicas = sortCursos(unicas);
         setAsignaturas(unicas);
         setCursoActual(unicas[0].id.toString());
       } else {

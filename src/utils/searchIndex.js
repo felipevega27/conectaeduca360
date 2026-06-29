@@ -14,7 +14,7 @@ export const menuItems = [
   { id: 'dir-configuracion', label: 'Config. Institucional', route: '/panel/director/configuracion', role: 'director', icon: 'cog' },
 
   // Módulos Profesor
-  { id: 'prof-dashboard', label: 'Mi Horario', route: '/panel/profesor', role: 'profesor', icon: 'calendar' },
+  { id: 'prof-dashboard', label: 'Panel Principal', route: '/panel/profesor', role: 'profesor', icon: 'home' },
   { id: 'prof-asistencia', label: 'Pasar Asistencia', route: '/panel/profesor/asistencia', role: 'profesor', icon: 'clipboard-check' },
   { id: 'prof-calificaciones', label: 'Calificaciones', route: '/panel/profesor/calificaciones', role: 'profesor', icon: 'chart-bar' },
   { id: 'prof-anotaciones', label: 'Anotaciones (Hoja de Vida)', route: '/panel/profesor/anotaciones', role: 'profesor', icon: 'document-text' },
