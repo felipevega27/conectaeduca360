@@ -4,6 +4,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import BackdropLoader from '../../components/BackdropLoader';
 import { SkeletonCard, SkeletonBase } from '../../components/SkeletonLoader';
+import { notificarPorRol } from '../../utils/notificacionesUtils';
 
 export default function ProfesorPlanificaciones() {
   const [user, setUser] = useState(null);
@@ -12,6 +13,7 @@ export default function ProfesorPlanificaciones() {
   const [cursoActual, setCursoActual] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [semestreActivo, setSemestreActivo] = useState('Primer Semestre');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingIA, setIsGeneratingIA] = useState(false);
@@ -61,7 +63,7 @@ export default function ProfesorPlanificaciones() {
     if (cursoActual && user) {
       cargarPlanificaciones();
     }
-  }, [cursoActual, user]);
+  }, [cursoActual, user, semestreActivo]);
 
   const cargarPlanificaciones = async () => {
     setIsLoading(true);
@@ -75,7 +77,24 @@ export default function ProfesorPlanificaciones() {
         .eq('id_asignatura', asignSelect.id)
         .order('fecha_creacion', { ascending: true });
 
-      setPlanificaciones(data || []);
+      if (data) {
+        const getMesesSemestre = (semestre) => {
+          if (semestre === 'Primer Semestre') return [2, 3, 4, 5, 6]; 
+          if (semestre === 'Segundo Semestre') return [7, 8, 9, 10, 11]; 
+          return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        };
+        const mesesValidos = getMesesSemestre(semestreActivo);
+        const perteneceAlSemestre = (fechaString) => {
+          if (!fechaString) return false;
+          const mesStr = fechaString.includes('T') ? fechaString.split('T')[0].split('-')[1] : fechaString.split('-')[1];
+          return mesesValidos.includes(parseInt(mesStr, 10) - 1);
+        };
+
+        const planificacionesFiltradas = data.filter(p => perteneceAlSemestre(p.fecha_limite || p.fecha_creacion));
+        setPlanificaciones(planificacionesFiltradas);
+      } else {
+        setPlanificaciones([]);
+      }
     } catch (error) {
       console.error('Error al cargar planificaciones:', error);
     } finally {
@@ -174,6 +193,16 @@ export default function ProfesorPlanificaciones() {
       const { error } = await supabase.from('planificaciones').update({ estado: 'En Revisión' }).in('id', idsBorradores);
       if (error) throw error;
       toast.success('¡Planificaciones enviadas a UTP con éxito!');
+      
+      const asignSelect = asignaturas.find(a => a.id.toString() === cursoActual);
+      await notificarPorRol(
+        ['director', 'administrador'], 
+        'alerta', 
+        'Nuevas planificaciones a revisión', 
+        `El profesor ${user?.nombre || user?.rut} ha enviado ${borrados.length} planificación(es) de ${asignSelect?.nombre || 'asignatura'} para su revisión.`, 
+        '/panel/director/utp'
+      );
+
       cargarPlanificaciones();
     } catch (error) {
       toast.error('Error al enviar a UTP.');
@@ -230,6 +259,14 @@ export default function ProfesorPlanificaciones() {
         </div>
 
         <div className="flex items-center gap-3">
+          <select 
+            className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 focus:border-blue-500 focus:outline-none shadow-sm"
+            value={semestreActivo}
+            onChange={(e) => setSemestreActivo(e.target.value)}
+          >
+            <option value="Primer Semestre">1º Semestre</option>
+            <option value="Segundo Semestre">2º Semestre</option>
+          </select>
           <select
             value={cursoActual}
             onChange={(e) => setCursoActual(e.target.value)}

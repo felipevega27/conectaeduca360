@@ -5,6 +5,9 @@ export default function ApoderadoRendimiento() {
   const [pupilos, setPupilos] = useState([]);
   const [pupiloActivo, setPupiloActivo] = useState(null);
   const [rendimiento, setRendimiento] = useState([]);
+  const [promedioGeneral, setPromedioGeneral] = useState('0.0');
+  const [asignaturasRiesgo, setAsignaturasRiesgo] = useState(0);
+  const [semestreActivo, setSemestreActivo] = useState('Primer Semestre');
   const [isLoading, setIsLoading] = useState(true);
 
   // Inicializar estado desde localStorage
@@ -30,7 +33,7 @@ export default function ApoderadoRendimiento() {
     if (pupiloActivo) {
       cargarCalificaciones(pupiloActivo.rut);
     }
-  }, [pupiloActivo]);
+  }, [pupiloActivo, semestreActivo]);
 
   const cargarCalificaciones = async (rutAlumno) => {
     setIsLoading(true);
@@ -69,8 +72,9 @@ export default function ApoderadoRendimiento() {
       // 4. Obtener evaluaciones del curso
       const { data: evalData } = await supabase
         .from('evaluaciones')
-        .select('id, id_asignatura')
-        .eq('id_curso', matData.id_curso);
+        .select('id, id_asignatura, semestre')
+        .eq('id_curso', matData.id_curso)
+        .eq('semestre', semestreActivo);
 
       // 5. Obtener notas
       const { data: califData } = await supabase
@@ -101,19 +105,34 @@ export default function ApoderadoRendimiento() {
           if (promedio >= 6.0) estado = 'Excelente';
           else if (promedio >= 5.0) estado = 'Óptimo';
           else if (promedio >= 4.0) estado = 'Precaución';
-          else estado = 'Crítico';
+          else estado = 'En Riesgo';
         }
 
         return {
           id: asig.id,
           asignatura: asig.nombre,
-          profesor: profesores[asig.rut_profesor] || 'Profesor no asignado',
-          promedio,
-          estado,
-          notas: notasAsig
+          docente: profesores[asig.rut_profesor] || 'Sin docente',
+          notas: notasAsig,
+          promedio: promedio > 0 ? promedio.toFixed(1) : '-',
+          promedioNum: promedio,
+          estado: estado
         };
       }) || [];
 
+      let sumPromedios = 0;
+      let countPromedios = 0;
+      let countRiesgo = 0;
+
+      rendimientosArr.forEach(r => {
+        if (r.promedioNum > 0) {
+          sumPromedios += r.promedioNum;
+          countPromedios++;
+          if (r.promedioNum < 4.0) countRiesgo++;
+        }
+      });
+
+      setPromedioGeneral(countPromedios > 0 ? (sumPromedios / countPromedios).toFixed(1) : '0.0');
+      setAsignaturasRiesgo(countRiesgo);
       setRendimiento(rendimientosArr);
     } catch (err) {
       console.error(err);
@@ -129,10 +148,6 @@ export default function ApoderadoRendimiento() {
     window.dispatchEvent(new Event('pupiloChanged'));
   };
 
-  const promedioGeneral = rendimiento.filter(r => r.promedio > 0).length > 0 
-    ? (rendimiento.filter(r => r.promedio > 0).reduce((acc, curr) => acc + curr.promedio, 0) / rendimiento.filter(r => r.promedio > 0).length).toFixed(1)
-    : '-';
-  const asignaturasRiesgo = rendimiento.filter(r => r.promedio > 0 && r.promedio < 4.0).length;
 
   if (isLoading) {
     return <div className="p-8 text-center text-gray-500">Cargando rendimiento...</div>;
@@ -157,6 +172,17 @@ export default function ApoderadoRendimiento() {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Rendimiento Académico</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Informe oficial de calificaciones parciales.</p>
         </div>
+        
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Selector de Semestre */}
+          <select 
+            className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            value={semestreActivo}
+            onChange={(e) => setSemestreActivo(e.target.value)}
+          >
+            <option value="Primer Semestre">1º Semestre</option>
+            <option value="Segundo Semestre">2º Semestre</option>
+          </select>
         
         {/* Selector de Pupilo */}
         <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-2 pl-3 rounded-xl border border-gray-200 dark:border-gray-700">
@@ -183,31 +209,40 @@ export default function ApoderadoRendimiento() {
             <svg className="w-5 h-5 text-gray-400 pointer-events-none mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
           )}
         </div>
+        </div>
       </div>
 
       {/* KPI'S ANALÍTICOS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-col justify-center">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Promedio General</p>
-          <div className="flex items-end gap-3">
-            <h2 className="text-5xl font-black text-indigo-600 dark:text-indigo-400">{promedioGeneral}</h2>
-            <span className="text-sm font-medium text-emerald-500 mb-1.5 flex items-center">
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-              En alza
-            </span>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mt-6 relative z-10">
+        {/* Promedio General */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow relative overflow-hidden group">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-colors"></div>
+          <div className="flex justify-between items-start mb-4 relative z-10">
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Promedio General</p>
+              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{promedioGeneral}</h3>
+              <span className="text-sm font-medium text-emerald-500 mb-1.5 flex items-center">
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                En alza
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Riesgo Repitencia</p>
-            <h2 className={`text-3xl font-black ${asignaturasRiesgo > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-              {asignaturasRiesgo} <span className="text-lg text-gray-500 font-medium">Asignaturas</span>
-            </h2>
+        {/* Asignaturas en Riesgo */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow relative overflow-hidden group">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-red-500/10 rounded-full blur-2xl group-hover:bg-red-500/20 transition-colors"></div>
+          <div className="flex justify-between items-start mb-4 relative z-10">
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Riesgo Repitencia</p>
+              <h2 className={`text-3xl font-black ${asignaturasRiesgo > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {asignaturasRiesgo} <span className="text-lg text-gray-500 font-medium">Asignaturas</span>
+              </h2>
+            </div>
           </div>
         </div>
 
-        <div className="bg-linear-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 shadow-sm text-white flex flex-col justify-center relative overflow-hidden">
+        <div className="bg-linear-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 shadow-sm text-white flex flex-col justify-center relative overflow-hidden lg:col-span-2">
           <svg className="absolute -right-4 -top-4 w-24 h-24 text-indigo-500/50" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
           <p className="text-xs font-bold text-indigo-200 uppercase tracking-wider mb-1 z-10">Descargar Informe</p>
           <h2 className="text-xl font-bold mb-3 z-10">Certificado de Notas Parciales</h2>

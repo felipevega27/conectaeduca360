@@ -12,6 +12,7 @@ import { SkeletonRow } from '../../components/SkeletonLoader';
 export default function DirectorRendimiento() {
   const barChartRef = useRef(null);
   const lineChartRef = useRef(null);
+  const [semestreActivo, setSemestreActivo] = useState('Primer Semestre');
 
   // --- ESTADOS Y DATOS (Custom Hook) ---
   const { 
@@ -22,7 +23,7 @@ export default function DirectorRendimiento() {
     metricasPaes, 
     isLoading, 
     config 
-  } = useRendimiento();
+  } = useRendimiento(semestreActivo);
 
   // --- EFECTO DE GRÁFICOS ---
   useEffect(() => {
@@ -92,7 +93,7 @@ export default function DirectorRendimiento() {
       if (lineChart) lineChart.destroy();
       window.removeEventListener('themeChanged', renderCharts);
     };
-  }, [chartDataBar, chartDataLine]); // El gráfico se redibuja cuando llegan los datos de notas
+  }, [chartDataBar, chartDataLine, isLoading, semestreActivo]); // El gráfico se redibuja cuando llegan los datos de notas
 
   // --- GENERACIÓN DE INFORME UTP (PDF) ---
   const generarInformeUTP = async () => {
@@ -287,10 +288,20 @@ export default function DirectorRendimiento() {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Rendimiento Académico</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Análisis global de calificaciones y ensayos (SIMCE/PAES).</p>
         </div>
-        <button onClick={generarInformeUTP} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all hover:-translate-y-0.5 whitespace-nowrap">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-          Descargar Informe UTP
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <select 
+            className="rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            value={semestreActivo}
+            onChange={(e) => setSemestreActivo(e.target.value)}
+          >
+            <option value="Primer Semestre">1º Semestre</option>
+            <option value="Segundo Semestre">2º Semestre</option>
+          </select>
+          <button onClick={generarInformeUTP} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all hover:-translate-y-0.5 whitespace-nowrap">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+            Descargar Informe UTP
+          </button>
+        </div>
       </div>
 
       {/* KPIs SUPERIORES */}

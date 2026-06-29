@@ -23,6 +23,7 @@ export default function DirectorDashboard() {
   const [isFichaDrawerOpen, setIsFichaDrawerOpen] = useState(false);
   const [rutFichaSeleccionada, setRutFichaSeleccionada] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [semestreActivo, setSemestreActivo] = useState('Primer Semestre');
 
   // --- ESTADOS BASE DE DATOS (Supabase) via HOOK ---
   const {
@@ -36,7 +37,7 @@ export default function DirectorDashboard() {
     alertas,
     isLoading,
     isUsingFallback
-  } = useDirectorDashboard();
+  } = useDirectorDashboard(semestreActivo);
 
   // --- REFERENCIAS DE GRÁFICOS ---
   const chartAreaRef = useRef(null);
@@ -97,7 +98,11 @@ export default function DirectorDashboard() {
 
       const ctxRev = revenueChartRef.current.getContext('2d');
       let gradient = ctxRev.createLinearGradient(0, 0, 0, 400); gradient.addColorStop(0, 'rgba(1, 6, 148, 0.2)'); gradient.addColorStop(1, 'rgba(1, 6, 148, 0)');
-      new Chart(ctxRev, { type: 'line', data: { labels: ['Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct'], datasets: [{ label: 'Asistencia General %', data: [85, 88, 92, 90, 94, 91, 95, asistenciaGlobal || 93], borderColor: '#010694', backgroundColor: gradient, tension: 0.4, fill: true, pointBackgroundColor: '#ffffff', pointBorderColor: '#010694', pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 70, grid: { color: gridColor, borderDash: [5, 5] }, border: { display: false } }, x: { grid: { display: false }, border: { display: false } } } } });
+      
+      const revenueLabels = semestreActivo === 'Primer Semestre' ? ['Mar', 'Abr', 'May', 'Jun', 'Jul'] : ['Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      const revenueData = semestreActivo === 'Primer Semestre' ? [85, 88, 92, 90, asistenciaGlobal || 93] : [91, 94, 92, 95, asistenciaGlobal || 93];
+
+      new Chart(ctxRev, { type: 'line', data: { labels: revenueLabels, datasets: [{ label: 'Asistencia General %', data: revenueData, borderColor: '#010694', backgroundColor: gradient, tension: 0.4, fill: true, pointBackgroundColor: '#ffffff', pointBorderColor: '#010694', pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 70, grid: { color: gridColor, borderDash: [5, 5] }, border: { display: false } }, x: { grid: { display: false }, border: { display: false } } } } });
       new Chart(trafficChartRef.current, { type: 'pie', data: { labels: ['Regular', 'Prioritario (SEP)', 'PIE'], datasets: [{ data: [porcentajes.regular, porcentajes.sep, porcentajes.pie], backgroundColor: ['#010694', '#6d70fc', '#22c55e'], borderWidth: 2, borderColor: isDark ? '#1f2937' : '#ffffff', hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { backgroundColor: isDark ? '#374151' : '#ffffff', titleColor: isDark ? '#f3f4f6' : '#1f2937', bodyColor: isDark ? '#d1d5db' : '#4b5563', borderColor: isDark ? '#4b5563' : '#e5e7eb', borderWidth: 1, padding: 12, usePointStyle: true, callbacks: { label: (context) => ` ${context.label}: ${context.parsed}%` } } } } });
     };
 
@@ -109,7 +114,7 @@ export default function DirectorDashboard() {
       destroyChartSafely(chartLineRef); destroyChartSafely(revenueChartRef); destroyChartSafely(trafficChartRef);
       window.removeEventListener('themeChanged', renderCharts);
     };
-  }, [porcentajes, asistenciaGlobal, alumnosRiesgo, metricasPIE, protocolosActivos]); 
+  }, [porcentajes, asistenciaGlobal, alumnosRiesgo, metricasPIE, protocolosActivos, isLoading, semestreActivo]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -525,9 +530,13 @@ export default function DirectorDashboard() {
               <h3 className="text-base font-semibold text-gray-800 dark:text-white">Evolución de Asistencia vs Meta Subvención</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Línea base requerida Mineduc: 85%</p>
             </div>
-            <select className="rounded-lg border border-gray-200 dark:border-gray-600 bg-transparent dark:bg-gray-800 px-2 py-1 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500">
-              <option>Semestre Actual</option>
-              <option>Semestre Anterior</option>
+            <select 
+              className="rounded-lg border border-gray-200 dark:border-gray-600 bg-transparent dark:bg-gray-800 px-2 py-1 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={semestreActivo}
+              onChange={(e) => setSemestreActivo(e.target.value)}
+            >
+              <option value="Primer Semestre">1º Semestre</option>
+              <option value="Segundo Semestre">2º Semestre</option>
             </select>
           </div>
           <div className="relative h-64 w-full">

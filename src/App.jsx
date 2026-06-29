@@ -40,6 +40,7 @@ import ApoderadoAsistencia from './pages/apoderado/ApoderadoAsistencia';
 
 // Módulos Compartidos
 import MiPerfil from './pages/shared/MiPerfil';
+import NotificacionesPage from './pages/shared/NotificacionesPage';
 
 // Componentes de Seguridad
 import PrivateRoute from './components/PrivateRoute';
@@ -65,6 +66,7 @@ function App() {
           <Route element={<DirectorLayout />}>
             <Route path="/panel/director" element={<DirectorDashboard />} />
             <Route path="/panel/director/mi-perfil" element={<MiPerfil />} />
+            <Route path="/panel/director/notificaciones" element={<NotificacionesPage />} />
             <Route path="/panel/director/alertas-asistencia" element={<DirectorAlertasAsistencia />} />
             <Route path="/panel/director/ficha-alumno" element={<DirectorFichaAlumno />} />
 
@@ -118,6 +120,7 @@ function App() {
           <Route element={<ProfesorLayout />}>
             <Route path="/panel/profesor" element={<ProfesorDashboard />} />
             <Route path="/panel/profesor/mi-perfil" element={<MiPerfil />} />
+            <Route path="/panel/profesor/notificaciones" element={<NotificacionesPage />} />
             <Route path="/panel/profesor/asistencia" element={<ProfesorAsistencia />} />
             {/* NUEVA RUTA AQUÍ */}
             <Route path="/panel/profesor/anotaciones" element={<ProfesorAnotaciones />} />
@@ -141,6 +144,7 @@ function App() {
           <Route element={<AlumnoLayout />}>
             <Route path="/panel/alumno" element={<AlumnoDashboard />} />
             <Route path="/panel/alumno/mi-perfil" element={<MiPerfil />} />
+            <Route path="/panel/alumno/notificaciones" element={<NotificacionesPage />} />
             {/* NUEVA RUTA AQUÍ */}
             <Route path="/panel/alumno/calificaciones" element={<AlumnoCalificaciones />} />
             {/* NUEVA RUTA AQUÍ */}
@@ -159,6 +163,7 @@ function App() {
           <Route element={<ApoderadoLayout />}>
             <Route path="/panel/apoderado" element={<ApoderadoDashboard />} />
             <Route path="/panel/apoderado/mi-perfil" element={<MiPerfil />} />
+            <Route path="/panel/apoderado/notificaciones" element={<NotificacionesPage />} />
             <Route path="/panel/apoderado/rendimiento" element={<ApoderadoRendimiento />} />
             <Route path="/panel/apoderado/asistencia" element={<ApoderadoAsistencia />} />
           </Route>

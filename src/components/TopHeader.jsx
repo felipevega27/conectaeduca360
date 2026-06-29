@@ -413,7 +413,13 @@ export default function TopHeader({
                 )}
               </div>
               <div className="p-2 border-t border-gray-100 dark:border-gray-700 text-center">
-                <button className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors w-full p-2">
+                <button 
+                  onClick={() => {
+                    setIsNotificationsOpen(false);
+                    navigate(`/panel/${(user?.role || user?.rol || 'alumno').toLowerCase()}/notificaciones`);
+                  }}
+                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors w-full p-2"
+                >
                   Ver todas las notificaciones
                 </button>
               </div>

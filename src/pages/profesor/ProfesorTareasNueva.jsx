@@ -4,6 +4,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import logoTexto from '../../assets/logo_texto.png';
 import BackdropLoader from '../../components/BackdropLoader';
+import { notificarCurso } from '../../utils/notificacionesUtils';
 
 export default function ProfesorTareasNueva() {
   const navigate = useNavigate();
@@ -337,6 +338,17 @@ export default function ProfesorTareasNueva() {
           archivo_url: archivoUrlGuardado // <-- EL LINK DEL ARCHIVO SE GUARDA AQUÍ
         }]);
         if (error) throw error;
+        
+        // NOTIFICAR AL CURSO (Alumnos y Apoderados)
+        await notificarCurso(
+          asignaturaSeleccionada.id_curso, 
+          ['alumno', 'apoderado'],
+          'alerta', 
+          'Nueva Tarea Asignada', 
+          `El profesor ${user?.nombre || user?.rut} ha asignado la tarea: "${tituloForm.trim()}" en ${asignaturaSeleccionada.nombre}.`,
+          null
+        );
+
         toast.success('Tarea formativa publicada correctamente.', { id: toastId });
         setTimeout(() => navigate('/panel/profesor/tareas'), 1500);
       }

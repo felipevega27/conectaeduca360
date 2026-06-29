@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import { SkeletonRow } from '../../components/SkeletonLoader';
+import { notificarUsuario } from '../../utils/notificacionesUtils';
 
 export default function DirectorUTP() {
     const navigate = useNavigate();
     const [planificaciones, setPlanificaciones] = useState([]);
     const [filtroActivo, setFiltroActivo] = useState('En Revisión'); // Pestañas reales
     const [isLoading, setIsLoading] = useState(true);
+    const [semestreActivo, setSemestreActivo] = useState('Primer Semestre');
 
     // Cargar los datos desde la tabla real planificaciones
     const cargarPlanificaciones = async () => {
@@ -26,6 +28,7 @@ export default function DirectorUTP() {
                     actividad,
                     estado,
                     fecha_creacion,
+                    rut_profesor,
                     asignaturas ( nombre ),
                     cursos ( nombre ),
                     perfiles ( nombre )
@@ -34,10 +37,25 @@ export default function DirectorUTP() {
                 .order('fecha_creacion', { ascending: false }); // Las más recientes primero
 
             if (error) throw error;
-            setPlanificaciones(data || []);
+            
+            // FILTRADO POR SEMESTRE
+            const getMesesSemestre = (semestre) => {
+                if (semestre === 'Primer Semestre') return [2, 3, 4, 5, 6]; 
+                if (semestre === 'Segundo Semestre') return [7, 8, 9, 10, 11]; 
+                return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+            };
+            const mesesValidos = getMesesSemestre(semestreActivo);
+            const perteneceAlSemestre = (fechaString) => {
+                if (!fechaString) return false;
+                const mesStr = fechaString.includes('T') ? fechaString.split('T')[0].split('-')[1] : fechaString.split('-')[1];
+                return mesesValidos.includes(parseInt(mesStr, 10) - 1);
+            };
+
+            const dataFiltrada = data?.filter(p => perteneceAlSemestre(p.fecha_creacion)) || [];
+            setPlanificaciones(dataFiltrada);
         } catch (error) {
-            console.error("Error al cargar planificaciones:", error.message);
-            toast.error("Hubo un problema al cargar los datos.");
+            console.error("Error al cargar planificaciones:", error);
+            toast.error("Hubo un problema al cargar los datos: " + (error?.message || JSON.stringify(error)));
         } finally {
             setIsLoading(false);
         }
@@ -45,7 +63,7 @@ export default function DirectorUTP() {
 
     useEffect(() => {
         cargarPlanificaciones();
-    }, []);
+    }, [semestreActivo]);
 
     // Función para aprobar o rechazar (Actualiza Supabase a los estados oficiales)
     const actualizarEstado = async (id, nuevoEstado) => {
@@ -60,6 +78,14 @@ export default function DirectorUTP() {
             // Actualizamos la vista localmente
             setPlanificaciones(prev => prev.map(p => p.id === id ? { ...p, estado: nuevoEstado } : p));
             toast.success(`Planificación ${nuevoEstado === 'Aprobado UTP' ? 'aprobada' : 'rechazada'} exitosamente.`);
+
+            // Notificar al profesor
+            const plan = planificaciones.find(p => p.id === id);
+            if (plan && plan.rut_profesor) {
+                const titulo = nuevoEstado === 'Aprobado UTP' ? 'Planificación Aprobada' : 'Planificación Rechazada';
+                const descripcion = `Tu planificación de ${plan.asignaturas?.nombre || 'la asignatura'} para el curso ${plan.cursos?.nombre || ''} ha sido ${nuevoEstado === 'Aprobado UTP' ? 'aprobada' : 'rechazada'} por UTP.`;
+                await notificarUsuario(plan.rut_profesor, 'alerta', titulo, descripcion, '/panel/profesor/planificaciones');
+            }
 
         } catch (error) {
             toast.error("Error al actualizar el estado: " + error.message);
@@ -88,11 +114,19 @@ export default function DirectorUTP() {
             <Toaster position="top-right" toastOptions={{ className: 'dark:!bg-gray-800 dark:!text-white dark:border dark:!border-gray-700' }} />
 
             {/* CABECERA */}
-            <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Gestión Académica UTP</h1>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Revisión de cobertura y aprobación de planificaciones docentes.</p>
                 </div>
+                <select
+                    value={semestreActivo}
+                    onChange={(e) => setSemestreActivo(e.target.value)}
+                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl px-4 py-2 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium transition-all text-sm w-full sm:w-auto cursor-pointer"
+                >
+                    <option value="Primer Semestre">1º Semestre</option>
+                    <option value="Segundo Semestre">2º Semestre</option>
+                </select>
             </div>
 
             {/* CONTENEDOR PRINCIPAL */}

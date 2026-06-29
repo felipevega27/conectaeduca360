@@ -26,6 +26,8 @@ export default function DirectorConvivencia() {
   const [listaAlumnos, setListaAlumnos] = useState([]);
   const [chartData, setChartData] = useState({ labels: [], data: [] });
   const [isLoading, setIsLoading] = useState(true);
+  const [filtroActivo, setFiltroActivo] = useState('Activo');
+  const [semestreActivo, setSemestreActivo] = useState('Primer Semestre');
   const [config, setConfig] = useState(null);
 
   // --- ESTADO DEL FORMULARIO NUEVO CASO ---
@@ -44,12 +46,26 @@ export default function DirectorConvivencia() {
     try {
       setIsLoading(true);
 
-      const { data: casosData, error: errCasos } = await supabase
+      const { data: casosDataRaw, error: errCasos } = await supabase
         .from('casos_convivencia')
         .select('*')
         .order('fecha_reporte', { ascending: false });
 
       if (errCasos) throw errCasos;
+
+      const getMesesSemestre = (semestre) => {
+        if (semestre === 'Primer Semestre') return [2, 3, 4, 5, 6]; 
+        if (semestre === 'Segundo Semestre') return [7, 8, 9, 10, 11]; 
+        return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+      };
+      const mesesValidos = getMesesSemestre(semestreActivo);
+      const perteneceAlSemestre = (fechaString) => {
+        if (!fechaString) return false;
+        const mesStr = fechaString.includes('T') ? fechaString.split('T')[0].split('-')[1] : fechaString.split('-')[1];
+        return mesesValidos.includes(parseInt(mesStr, 10) - 1);
+      };
+
+      const casosData = casosDataRaw?.filter(c => perteneceAlSemestre(c.fecha_reporte)) || [];
 
       const { data: perfilesData, error: errPerf } = await supabase
         .from('perfiles')
@@ -126,7 +142,7 @@ export default function DirectorConvivencia() {
 
   useEffect(() => {
     cargarCasos();
-  }, []);
+  }, [semestreActivo]);
 
   // 2. REEMPLAZA POR COMPLETO TU FUNCIÓN handleExportarRICE POR ESTA CORPROATIVA:
   const handleExportarRICE = async () => {
@@ -392,11 +408,9 @@ export default function DirectorConvivencia() {
       if (chartTipos) chartTipos.destroy();
       window.removeEventListener('themeChanged', renderCharts);
     };
-  }, [chartData]);
+  }, [chartData, isLoading]);
 
   // FILTRO EN TIEMPO REAL
-  const [filtroActivo, setFiltroActivo] = useState('Activo');
-
   const casosFiltrados = casos
     .filter(c => filtroActivo === 'Activo' ? c.estado_protocolo !== 'Cerrado' : c.estado_protocolo === 'Cerrado')
     .filter(caso =>
@@ -427,6 +441,14 @@ export default function DirectorConvivencia() {
             <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Convivencia Escolar</h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Monitoreo RICE, plazos de la Superintendencia y bitácora de mediación.</p>
           </div>
+          <select 
+            className="rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            value={semestreActivo}
+            onChange={(e) => setSemestreActivo(e.target.value)}
+          >
+            <option value="Primer Semestre">1º Semestre</option>
+            <option value="Segundo Semestre">2º Semestre</option>
+          </select>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
 

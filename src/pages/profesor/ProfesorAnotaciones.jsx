@@ -6,6 +6,7 @@ import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import BackdropLoader from '../../components/BackdropLoader';
+import { notificarPorRol, notificarUsuario } from '../../utils/notificacionesUtils';
 
 export default function ProfesorAnotaciones() {
   const [user, setUser] = useState(null);
@@ -137,6 +138,20 @@ export default function ProfesorAnotaciones() {
 
       toast.success(`Anotación guardada en hoja de vida de ${selectedAlumno.nombre}`, { id: toastId });
       
+      // NOTIFICAR A ROLES INTERESADOS
+      const titulo = `Nueva Anotación ${tipoAnotacion}`;
+      const desc = `El profesor ${user?.nombre || user?.rut} registró una anotación ${tipoAnotacion} a ${selectedAlumno.nombre}.`;
+      
+      // 1. Director
+      await notificarPorRol(['director'], 'alerta', titulo, desc, `/panel/director/alumnos/${selectedAlumno.rut}`);
+      // 2. Alumno
+      await notificarUsuario(selectedAlumno.rut, 'alerta', titulo, desc, '/panel/alumno/anotaciones');
+      // 3. Apoderado
+      const { data: matricula } = await supabase.from('matriculas').select('rut_apoderado').eq('rut_alumno', selectedAlumno.rut).maybeSingle();
+      if (matricula && matricula.rut_apoderado) {
+          await notificarUsuario(matricula.rut_apoderado, 'alerta', titulo, desc, '/panel/apoderado/rendimiento');
+      }
+
       // Limpiar formulario y recargar historial
       setSelectedAlumno(null);
       setSearchTerm('');

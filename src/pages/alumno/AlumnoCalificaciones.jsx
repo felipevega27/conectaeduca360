@@ -5,6 +5,7 @@ export default function AlumnoCalificaciones() {
   const [asignaturas, setAsignaturas] = useState([]);
   const [promedioGeneral, setPromedioGeneral] = useState('0.0');
   const [asignaturasRiesgo, setAsignaturasRiesgo] = useState(0);
+  const [semestreActivo, setSemestreActivo] = useState('Primer Semestre');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -13,7 +14,7 @@ export default function AlumnoCalificaciones() {
       const user = JSON.parse(loggedUserJSON);
       cargarCalificaciones(user.rut);
     }
-  }, []);
+  }, [semestreActivo]);
 
   const cargarCalificaciones = async (rutAlumno) => {
     setIsLoading(true);
@@ -43,11 +44,12 @@ export default function AlumnoCalificaciones() {
 
       const idsAsig = asigData.map(a => a.id);
 
-      // 3. Obtener evaluaciones
+      // 3. Obtener evaluaciones filtradas por semestre
       const { data: evalData } = await supabase
         .from('evaluaciones')
-        .select('id, nombre, porcentaje, id_asignatura')
-        .in('id_asignatura', idsAsig);
+        .select('id, nombre, porcentaje, id_asignatura, semestre')
+        .in('id_asignatura', idsAsig)
+        .eq('semestre', semestreActivo);
 
       // 4. Obtener notas del alumno
       const { data: califData } = await supabase
@@ -120,9 +122,19 @@ export default function AlumnoCalificaciones() {
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">
       
       {/* CABECERA */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Mis Calificaciones</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Revisa tu rendimiento académico del Primer Semestre.</p>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Mis Calificaciones</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Revisa tu rendimiento académico por semestre.</p>
+        </div>
+        <select 
+          className="rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          value={semestreActivo}
+          onChange={(e) => setSemestreActivo(e.target.value)}
+        >
+          <option value="Primer Semestre">1º Semestre</option>
+          <option value="Segundo Semestre">2º Semestre</option>
+        </select>
       </div>
 
       {/* KPI'S DEL ALUMNO */}

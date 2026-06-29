@@ -5,6 +5,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import FichaAlumnoDrawer from '../../components/FichaAlumnoDrawer';
 import { SkeletonCard, SkeletonRow } from '../../components/SkeletonLoader';
 import BackdropLoader from '../../components/BackdropLoader';
+import { notificarPorRol } from '../../utils/notificacionesUtils';
 
 export default function ProfesorAsistencia() {
     const navigate = useNavigate();
@@ -269,6 +270,15 @@ export default function ProfesorAsistencia() {
                     rut_profesor: rutProfesor
                 }]);
             }
+
+            // NOTIFICAR AL DIRECTOR
+            await notificarPorRol(
+                ['director'], 
+                'alerta', 
+                'Asistencia y Leccionario Cerrado', 
+                `El docente ${loggedUser.nombre || loggedUser.rut} ha firmado y cerrado la asistencia de ${selectedClase.curso} en ${selectedClase.asignatura}.`, 
+                '/panel/director/asistencia'
+            );
 
             toast.success('Clase firmada y asistencia registrada.', { id: toastId });
             setTimeout(() => navigate('/panel/profesor'), 1500);

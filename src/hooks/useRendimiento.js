@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../config/supabaseClient';
 
-export function useRendimiento() {
+export function useRendimiento(semestreActivo = 'Primer Semestre') {
   const [promedioGeneral, setPromedioGeneral] = useState('0.0');
   const [cursosEnRiesgo, setCursosEnRiesgo] = useState([]);
   const [chartDataBar, setChartDataBar] = useState({ labels: [], data: [], colors: [] });
@@ -15,7 +15,12 @@ export function useRendimiento() {
       setIsLoading(true);
 
       // 1. Descargamos toda la red académica
-      const { data: notas } = await supabase.from('notas').select('*');
+      const { data: evaluacionesRaw } = await supabase.from('evaluaciones').select('id, semestre');
+      const evaluaciones = evaluacionesRaw?.filter(e => e.semestre === semestreActivo) || [];
+      const idsEvaluaciones = new Set(evaluaciones.map(e => e.id));
+
+      const { data: notasRaw } = await supabase.from('notas').select('*');
+      const notas = notasRaw?.filter(n => idsEvaluaciones.has(n.id_evaluacion)) || [];
       const { data: asignaturas } = await supabase.from('asignaturas').select('*');
       const { data: cursos } = await supabase.from('cursos').select('*');
       const { data: profes } = await supabase.from('perfiles').select('*').eq('rol', 'profesor');
@@ -126,7 +131,7 @@ export function useRendimiento() {
 
   useEffect(() => {
     cargarRendimiento();
-  }, []);
+  }, [semestreActivo]);
 
   return {
     promedioGeneral,

@@ -10,6 +10,7 @@ export default function ProfesorTareas() {
   const navigate = useNavigate();
 
   const [cursoFiltro, setCursoFiltro] = useState('Todos');
+  const [semestreActivo, setSemestreActivo] = useState('Primer Semestre');
 
   // Estados para Modal "Sala de Corrección"
   const [isDetallesOpen, setIsDetallesOpen] = useState(false);
@@ -40,7 +41,7 @@ export default function ProfesorTareas() {
       cargarAsignaturas(parsedUser.rut);
       cargarTareas(parsedUser.rut);
     }
-  }, []);
+  }, [semestreActivo]);
 
   const cargarAsignaturas = async (rutProfesor) => {
     try {
@@ -72,7 +73,21 @@ export default function ProfesorTareas() {
       if (error) throw error;
 
       if (data) {
-        const tareasMapeadas = data.map(t => ({
+        const getMesesSemestre = (semestre) => {
+          if (semestre === 'Primer Semestre') return [2, 3, 4, 5, 6]; 
+          if (semestre === 'Segundo Semestre') return [7, 8, 9, 10, 11]; 
+          return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        };
+        const mesesValidos = getMesesSemestre(semestreActivo);
+        const perteneceAlSemestre = (fechaString) => {
+          if (!fechaString) return false;
+          const mesStr = fechaString.includes('T') ? fechaString.split('T')[0].split('-')[1] : fechaString.split('-')[1];
+          return mesesValidos.includes(parseInt(mesStr, 10) - 1);
+        };
+
+        const tareasFiltradas = data.filter(t => perteneceAlSemestre(t.fecha_entrega));
+
+        const tareasMapeadas = tareasFiltradas.map(t => ({
           id: t.id,
           titulo: t.titulo,
           id_curso: t.id_curso,
@@ -246,9 +261,19 @@ export default function ProfesorTareas() {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Gestión de Tareas</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Administre las asignaciones, califique entregas y revise el progreso de sus estudiantes.</p>
         </div>
-        <button onClick={() => navigate('/panel/profesor/tareas/nueva')} className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-bold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-600/30 transform hover:-translate-y-0.5">
-          Crear Nueva Tarea
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <select 
+            className="rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            value={semestreActivo}
+            onChange={(e) => setSemestreActivo(e.target.value)}
+          >
+            <option value="Primer Semestre">1º Semestre</option>
+            <option value="Segundo Semestre">2º Semestre</option>
+          </select>
+          <button onClick={() => navigate('/panel/profesor/tareas/nueva')} className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-bold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-600/30 transform hover:-translate-y-0.5">
+            Crear Nueva Tarea
+          </button>
+        </div>
       </div>
 
       {/* PLANILLA PRINCIPAL */}
