@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import BackdropLoader from '../../components/BackdropLoader';
 import { SkeletonCard, SkeletonBase } from '../../components/SkeletonLoader';
 import { notificarPorRol } from '../../utils/notificacionesUtils';
+import { perteneceAlSemestre } from '../../utils/dateUtils';
 
 export default function ProfesorPlanificaciones() {
   const [user, setUser] = useState(null);
@@ -78,19 +79,7 @@ export default function ProfesorPlanificaciones() {
         .order('fecha_creacion', { ascending: true });
 
       if (data) {
-        const getMesesSemestre = (semestre) => {
-          if (semestre === 'Primer Semestre') return [2, 3, 4, 5, 6]; 
-          if (semestre === 'Segundo Semestre') return [7, 8, 9, 10, 11]; 
-          return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-        };
-        const mesesValidos = getMesesSemestre(semestreActivo);
-        const perteneceAlSemestre = (fechaString) => {
-          if (!fechaString) return false;
-          const mesStr = fechaString.includes('T') ? fechaString.split('T')[0].split('-')[1] : fechaString.split('-')[1];
-          return mesesValidos.includes(parseInt(mesStr, 10) - 1);
-        };
-
-        const planificacionesFiltradas = data.filter(p => perteneceAlSemestre(p.fecha_limite || p.fecha_creacion));
+        const planificacionesFiltradas = data.filter(p => perteneceAlSemestre(p.fecha_limite || p.fecha_creacion, semestreActivo));
         setPlanificaciones(planificacionesFiltradas);
       } else {
         setPlanificaciones([]);

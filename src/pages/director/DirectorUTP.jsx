@@ -4,6 +4,7 @@ import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import { SkeletonRow } from '../../components/SkeletonLoader';
 import { notificarUsuario } from '../../utils/notificacionesUtils';
+import { perteneceAlSemestre } from '../../utils/dateUtils';
 
 export default function DirectorUTP() {
     const navigate = useNavigate();
@@ -39,19 +40,7 @@ export default function DirectorUTP() {
             if (error) throw error;
             
             // FILTRADO POR SEMESTRE
-            const getMesesSemestre = (semestre) => {
-                if (semestre === 'Primer Semestre') return [2, 3, 4, 5, 6]; 
-                if (semestre === 'Segundo Semestre') return [7, 8, 9, 10, 11]; 
-                return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-            };
-            const mesesValidos = getMesesSemestre(semestreActivo);
-            const perteneceAlSemestre = (fechaString) => {
-                if (!fechaString) return false;
-                const mesStr = fechaString.includes('T') ? fechaString.split('T')[0].split('-')[1] : fechaString.split('-')[1];
-                return mesesValidos.includes(parseInt(mesStr, 10) - 1);
-            };
-
-            const dataFiltrada = data?.filter(p => perteneceAlSemestre(p.fecha_creacion)) || [];
+            const dataFiltrada = data?.filter(p => perteneceAlSemestre(p.fecha_creacion, semestreActivo)) || [];
             setPlanificaciones(dataFiltrada);
         } catch (error) {
             console.error("Error al cargar planificaciones:", error);

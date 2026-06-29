@@ -35,6 +35,7 @@ export default function DirectorDashboard() {
     metricasPIE,
     protocolosActivos,
     alertas,
+    asistenciaMensual,
     isLoading,
     isUsingFallback
   } = useDirectorDashboard(semestreActivo);
@@ -100,7 +101,7 @@ export default function DirectorDashboard() {
       let gradient = ctxRev.createLinearGradient(0, 0, 0, 400); gradient.addColorStop(0, 'rgba(1, 6, 148, 0.2)'); gradient.addColorStop(1, 'rgba(1, 6, 148, 0)');
       
       const revenueLabels = semestreActivo === 'Primer Semestre' ? ['Mar', 'Abr', 'May', 'Jun', 'Jul'] : ['Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-      const revenueData = semestreActivo === 'Primer Semestre' ? [85, 88, 92, 90, asistenciaGlobal || 93] : [91, 94, 92, 95, asistenciaGlobal || 93];
+      const revenueData = asistenciaMensual?.length === 5 ? asistenciaMensual : [0, 0, 0, 0, 0];
 
       new Chart(ctxRev, { type: 'line', data: { labels: revenueLabels, datasets: [{ label: 'Asistencia General %', data: revenueData, borderColor: '#010694', backgroundColor: gradient, tension: 0.4, fill: true, pointBackgroundColor: '#ffffff', pointBorderColor: '#010694', pointBorderWidth: 2, pointRadius: 4, pointHoverRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 70, grid: { color: gridColor, borderDash: [5, 5] }, border: { display: false } }, x: { grid: { display: false }, border: { display: false } } } } });
       new Chart(trafficChartRef.current, { type: 'pie', data: { labels: ['Regular', 'Prioritario (SEP)', 'PIE'], datasets: [{ data: [porcentajes.regular, porcentajes.sep, porcentajes.pie], backgroundColor: ['#010694', '#6d70fc', '#22c55e'], borderWidth: 2, borderColor: isDark ? '#1f2937' : '#ffffff', hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { backgroundColor: isDark ? '#374151' : '#ffffff', titleColor: isDark ? '#f3f4f6' : '#1f2937', bodyColor: isDark ? '#d1d5db' : '#4b5563', borderColor: isDark ? '#4b5563' : '#e5e7eb', borderWidth: 1, padding: 12, usePointStyle: true, callbacks: { label: (context) => ` ${context.label}: ${context.parsed}%` } } } } });
@@ -114,7 +115,7 @@ export default function DirectorDashboard() {
       destroyChartSafely(chartLineRef); destroyChartSafely(revenueChartRef); destroyChartSafely(trafficChartRef);
       window.removeEventListener('themeChanged', renderCharts);
     };
-  }, [porcentajes, asistenciaGlobal, alumnosRiesgo, metricasPIE, protocolosActivos, isLoading, semestreActivo]);
+  }, [porcentajes, asistenciaGlobal, alumnosRiesgo, metricasPIE, protocolosActivos, asistenciaMensual, isLoading, semestreActivo]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -557,8 +558,8 @@ export default function DirectorDashboard() {
                 </div>
               </div>
             </div>
-            <button type="button" className="inline-flex items-center text-blue-600 dark:text-blue-400 font-medium hover:underline text-sm">
-              Año Actual <svg className="w-4 h-4 ml-1.5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 9-7 7-7-7" /></svg>
+            <button type="button" className="inline-flex items-center text-blue-600 dark:text-blue-400 font-medium hover:underline text-sm cursor-default">
+              Año {new Date().getFullYear()}
             </button>
           </div>
 

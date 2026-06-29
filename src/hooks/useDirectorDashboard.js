@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../config/supabaseClient';
+import { perteneceAlSemestre, getMesesSemestre } from '../utils/dateUtils';
 
 export default function useDirectorDashboard(semestreActivo = 'Primer Semestre') {
   const [totalAlumnos, setTotalAlumnos] = useState(0);
@@ -10,6 +11,7 @@ export default function useDirectorDashboard(semestreActivo = 'Primer Semestre')
   const [metricasPIE, setMetricasPIE] = useState({ porcentaje: 0, pendientes: 0 });
   const [protocolosActivos, setProtocolosActivos] = useState(0);
   const [alertas, setAlertas] = useState([]);
+  const [asistenciaMensual, setAsistenciaMensual] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUsingFallback, setIsUsingFallback] = useState(false);
 
@@ -20,22 +22,7 @@ export default function useDirectorDashboard(semestreActivo = 'Primer Semestre')
       // Carga manual de KPIs (sin RPC)
       setIsUsingFallback(true);
 
-      const getMesesSemestre = (semestre) => {
-        // Meses en JavaScript: 0=Enero, 1=Febrero, 2=Marzo... 11=Diciembre
-        if (semestre === 'Primer Semestre') return [2, 3, 4, 5, 6]; // Marzo a Julio
-        if (semestre === 'Segundo Semestre') return [7, 8, 9, 10, 11]; // Agosto a Diciembre
-        return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-      };
       const mesesValidos = getMesesSemestre(semestreActivo);
-      
-      // Helper para filtrar por semestre según fecha ('YYYY-MM-DD' o ISO)
-      const perteneceAlSemestre = (fechaString) => {
-        if (!fechaString) return false;
-        // Asume fecha en formato YYYY-MM-DD...
-        const mesStr = fechaString.includes('T') ? fechaString.split('T')[0].split('-')[1] : fechaString.split('-')[1];
-        const mes = parseInt(mesStr, 10) - 1; // 0-indexed
-        return mesesValidos.includes(mes);
-      };
 
       const { data: listaMatriculas } = await supabase.from('matriculas').select('rut_alumno, condicion_estudiante, cursos(nombre)');
       if (listaMatriculas && listaMatriculas.length > 0) {
@@ -56,7 +43,7 @@ export default function useDirectorDashboard(semestreActivo = 'Primer Semestre')
       }
 
       const { data: listaAsistenciaRaw } = await supabase.from('asistencia_alumnos').select('*');
-      const listaAsistencia = listaAsistenciaRaw?.filter(a => perteneceAlSemestre(a.fecha)) || [];
+      const listaAsistencia = listaAsistenciaRaw?.filter(a => perteneceAlSemestre(a.fecha, semestreActivo)) || [];
       if (listaAsistencia && listaAsistencia.length > 0) {
         const totalRegistros = listaAsistencia.length;
         const presentesYAtrasos = listaAsistencia.filter(a => a.estado === 'Presente' || a.estado === 'Atraso').length;
@@ -64,10 +51,31 @@ export default function useDirectorDashboard(semestreActivo = 'Primer Semestre')
         const ausencias = listaAsistencia.filter(a => a.estado === 'Ausente');
         const alumnosUnicosConAusencia = new Set(ausencias.map(a => a.rut_alumno));
         setAlumnosRiesgo(alumnosUnicosConAusencia.size);
+
+        // Agrupación mensual real para el gráfico
+        const mensualStats = {};
+        listaAsistencia.forEach(a => {
+           if (!a.fecha) return;
+           const mesStr = a.fecha.includes('T') ? a.fecha.split('T')[0].split('-')[1] : a.fecha.split('-')[1];
+           const mes = parseInt(mesStr, 10) - 1;
+           if (!mensualStats[mes]) mensualStats[mes] = { total: 0, presentes: 0 };
+           mensualStats[mes].total++;
+           if (a.estado === 'Presente' || a.estado === 'Atraso') mensualStats[mes].presentes++;
+        });
+
+        const asistenciaArr = mesesValidos.map(m => {
+           if (!mensualStats[m] || mensualStats[m].total === 0) return 0;
+           return Math.round((mensualStats[m].presentes / mensualStats[m].total) * 100);
+        });
+        setAsistenciaMensual(asistenciaArr);
+      } else {
+        setAsistenciaMensual([0, 0, 0, 0, 0]);
+        setAsistenciaGlobal(0);
+        setAlumnosRiesgo(0);
       }
 
       const { data: planificacionesRaw } = await supabase.from('planificaciones').select('*');
-      const planificaciones = planificacionesRaw?.filter(p => perteneceAlSemestre(p.fecha_limite)) || [];
+      const planificaciones = planificacionesRaw?.filter(p => perteneceAlSemestre(p.fecha_limite, semestreActivo)) || [];
       if (planificaciones && planificaciones.length > 0) {
         const hoy = new Date();
         const sumaCobertura = planificaciones.reduce((acc, plan) => acc + (plan.cobertura_porcentaje || 0), 0);
@@ -96,7 +104,7 @@ export default function useDirectorDashboard(semestreActivo = 'Primer Semestre')
       }
 
       const { data: casosConvivenciaRaw } = await supabase.from('casos_convivencia').select('id, fecha_reporte').eq('estado_protocolo', 'Activo');
-      const casosConvivencia = casosConvivenciaRaw?.filter(c => perteneceAlSemestre(c.fecha_reporte)) || [];
+      const casosConvivencia = casosConvivenciaRaw?.filter(c => perteneceAlSemestre(c.fecha_reporte, semestreActivo)) || [];
       setProtocolosActivos(casosConvivencia ? casosConvivencia.length : 0);
 
       // CARGA DE ALERTAS (Siempre local porque se necesitan los nombres y el payload es ligero con limit)
@@ -157,6 +165,7 @@ export default function useDirectorDashboard(semestreActivo = 'Primer Semestre')
     metricasPIE,
     protocolosActivos,
     alertas,
+    asistenciaMensual,
     isLoading,
     isUsingFallback
   };

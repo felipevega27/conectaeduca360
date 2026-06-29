@@ -19,11 +19,11 @@ export function useRendimiento(semestreActivo = 'Primer Semestre') {
       const evaluaciones = evaluacionesRaw?.filter(e => e.semestre === semestreActivo) || [];
       const idsEvaluaciones = new Set(evaluaciones.map(e => e.id));
 
-      const { data: notasRaw } = await supabase.from('notas').select('*');
+      const { data: notasRaw } = await supabase.from('notas').select('id_evaluacion, nota, id_asignatura');
       const notas = notasRaw?.filter(n => idsEvaluaciones.has(n.id_evaluacion)) || [];
-      const { data: asignaturas } = await supabase.from('asignaturas').select('*');
-      const { data: cursos } = await supabase.from('cursos').select('*');
-      const { data: profes } = await supabase.from('perfiles').select('*').eq('rol', 'profesor');
+      const { data: asignaturas } = await supabase.from('asignaturas').select('id, nombre, id_curso, rut_profesor');
+      const { data: cursos } = await supabase.from('cursos').select('id, nombre');
+      const { data: profes } = await supabase.from('perfiles').select('rut, nombre').eq('rol', 'profesor');
 
       if (!notas || notas.length === 0) {
         setPromedioGeneral('0.0');
@@ -82,7 +82,7 @@ export function useRendimiento(semestreActivo = 'Primer Semestre') {
       setCursosEnRiesgo(alertasRiesgo);
 
       // 5. Cargar Ensayos PAES
-      const { data: ensayos, error: errPaes } = await supabase.from('ensayos_paes').select('*');
+      const { data: ensayos, error: errPaes } = await supabase.from('ensayos_paes').select('nombre_ensayo, eje_evaluacion, puntaje');
       
       if (!errPaes && ensayos && ensayos.length > 0) {
         const agrupados = {};

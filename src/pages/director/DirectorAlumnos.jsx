@@ -18,6 +18,7 @@ export default function DirectorAlumnos() {
   // --- ESTADOS DE FILTROS ---
   const [searchTerm, setSearchTerm] = useState('');
   const [cursoFiltro, setCursoFiltro] = useState('Todos');
+  const [estadoFiltro, setEstadoFiltro] = useState('Activos');
 
   // --- ESTADOS DE PAGINACIÓN ---
   const [currentPage, setCurrentPage] = useState(1);
@@ -114,11 +115,15 @@ export default function DirectorAlumnos() {
     cargarDatos();
   }, []);
 
-  // --- 2. LÓGICA DE FILTRADO ---
+  // --- 2. FILTRADO LADO CLIENTE ---
   const alumnosFiltrados = alumnos.filter(a => {
     const matchSearch = a.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || a.rut.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCurso = cursoFiltro === 'Todos' || a.id_curso == cursoFiltro;
-    return matchSearch && matchCurso;
+    const matchCurso = cursoFiltro === 'Todos' || a.id_curso.toString() === cursoFiltro.toString();
+    const matchEstado = estadoFiltro === 'Todos' || 
+                       (estadoFiltro === 'Activos' && a.cursoNombre !== 'Sin Matricular') || 
+                       (estadoFiltro === 'Inactivos' && a.cursoNombre === 'Sin Matricular');
+    
+    return matchSearch && matchCurso && matchEstado;
   });
 
   // Reiniciar a página 1 si cambian los filtros
@@ -319,9 +324,19 @@ export default function DirectorAlumnos() {
           />
         </div>
 
-        {/* Filtro por Curso */}
-        <div className="w-full sm:w-auto flex items-center gap-2">
-          <label className="text-sm font-medium text-gray-600 dark:text-gray-400 shrink-0">Filtrar curso:</label>
+        {/* Filtro por Estado y Curso */}
+        <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-3">
+          <select 
+            value={estadoFiltro}
+            onChange={(e) => { setEstadoFiltro(e.target.value); setCurrentPage(1); }}
+            className="h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 dark:text-white text-sm focus:border-blue-500 outline-none cursor-pointer w-full sm:w-auto"
+          >
+            <option value="Activos">Matriculados Activos</option>
+            <option value="Inactivos">Sin Matricular (Ex Alumnos)</option>
+            <option value="Todos">Todos los Registros</option>
+          </select>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <label className="text-sm font-medium text-gray-600 dark:text-gray-400 shrink-0">Curso:</label>
           <select 
             value={cursoFiltro}
             onChange={(e) => setCursoFiltro(e.target.value)}
@@ -332,6 +347,7 @@ export default function DirectorAlumnos() {
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
+          </div>
         </div>
       </div>
 

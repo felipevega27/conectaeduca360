@@ -4,6 +4,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import BackdropLoader from '../../components/BackdropLoader';
 import { SkeletonCard } from '../../components/SkeletonLoader';
+import { perteneceAlSemestre } from '../../utils/dateUtils';
 
 export default function ProfesorTareas() {
   const [user, setUser] = useState(null);
@@ -24,6 +25,7 @@ export default function ProfesorTareas() {
   // Estados para Calificación
   const [notaInput, setNotaInput] = useState('');
   const [isSavingNota, setIsSavingNota] = useState(false);
+  const [isPublishingNotes, setIsPublishingNotes] = useState(false);
 
   // Datos desde Supabase
   const [asignaturasProfesor, setAsignaturasProfesor] = useState([]);
@@ -73,19 +75,7 @@ export default function ProfesorTareas() {
       if (error) throw error;
 
       if (data) {
-        const getMesesSemestre = (semestre) => {
-          if (semestre === 'Primer Semestre') return [2, 3, 4, 5, 6]; 
-          if (semestre === 'Segundo Semestre') return [7, 8, 9, 10, 11]; 
-          return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-        };
-        const mesesValidos = getMesesSemestre(semestreActivo);
-        const perteneceAlSemestre = (fechaString) => {
-          if (!fechaString) return false;
-          const mesStr = fechaString.includes('T') ? fechaString.split('T')[0].split('-')[1] : fechaString.split('-')[1];
-          return mesesValidos.includes(parseInt(mesStr, 10) - 1);
-        };
-
-        const tareasFiltradas = data.filter(t => perteneceAlSemestre(t.fecha_entrega));
+        const tareasFiltradas = data.filter(t => perteneceAlSemestre(t.fecha_entrega, semestreActivo));
 
         const tareasMapeadas = tareasFiltradas.map(t => ({
           id: t.id,
@@ -128,15 +118,14 @@ export default function ProfesorTareas() {
       }
 
       const ruts = matriculasData.map(m => m.rut_alumno);
-      const { data: perfiles } = await supabase
-        .from('perfiles')
-        .select('rut, nombre')
-        .in('rut', ruts);
+      
+      const [perfilesRes, entregasRes] = await Promise.all([
+        supabase.from('perfiles').select('rut, nombre, avatar_url').in('rut', ruts),
+        supabase.from('entregas_tareas').select('*').eq('id_tarea', tarea.id)
+      ]);
 
-      const { data: entregasData } = await supabase
-        .from('entregas_tareas')
-        .select('*')
-        .eq('id_tarea', tarea.id);
+      const perfiles = perfilesRes.data;
+      const entregasData = entregasRes.data;
 
       const hoy = new Date();
       const fechaLimite = new Date(tarea.fechaEntrega + 'T23:59:59');
@@ -155,6 +144,7 @@ export default function ProfesorTareas() {
         return {
           id: m.rut_alumno,
           nombre: perfil?.nombre || 'Alumno Desconocido',
+          avatar_url: perfil?.avatar_url || null,
           estado: estadoStr,
           nota: entrega?.nota || null,
           fecha: entrega ? new Date(entrega.fecha_entrega).toLocaleString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : null,
@@ -218,6 +208,64 @@ export default function ProfesorTareas() {
       toast.error('Error al guardar.', { id: toastId });
     } finally {
       setIsSavingNota(false);
+    }
+  };
+
+  const publicarNotasLibro = async () => {
+    if (!tareaSeleccionada) return;
+
+    // Solo publicar si hay notas ingresadas (alumnosTarea tienen nota no nula)
+    const entregasConNota = alumnosTarea.filter(a => a.nota !== null && a.nota !== undefined);
+    
+    if (entregasConNota.length === 0) {
+      toast.error('No hay notas calificadas para publicar.');
+      return;
+    }
+
+    setIsPublishingNotes(true);
+    const toastId = toast.loading('Publicando notas al Libro de Clases...');
+
+    try {
+      // 1. Crear la evaluación
+      const { data: nuevaEvaluacion, error: errEval } = await supabase
+        .from('evaluaciones')
+        .insert([{
+          id_asignatura: tareaSeleccionada.id_asignatura,
+          nombre: `Tarea: ${tareaSeleccionada.titulo}`,
+          fecha: new Date().toISOString().split('T')[0],
+          tipo_instrumento: 'Tarea',
+          porcentaje: 100, // Puede ser ajustable en el futuro
+          semestre: semestreActivo
+        }])
+        .select()
+        .single();
+
+      if (errEval || !nuevaEvaluacion) throw errEval || new Error('No se pudo crear la evaluación');
+
+      // 2. Preparar el payload masivo para la tabla de notas
+      const notasPayload = entregasConNota.map(alumno => ({
+        rut_alumno: alumno.id,
+        id_asignatura: tareaSeleccionada.id_asignatura,
+        nota: alumno.nota,
+        tipo_evaluacion: 'Nota Parcial',
+        fecha: new Date().toISOString().split('T')[0],
+        id_evaluacion: nuevaEvaluacion.id
+      }));
+
+      // 3. Insertar notas
+      const { error: errNotas } = await supabase
+        .from('notas')
+        .insert(notasPayload);
+
+      if (errNotas) throw errNotas;
+
+      toast.success(`Se publicaron ${notasPayload.length} notas exitosamente en el Libro de Clases.`, { id: toastId });
+
+    } catch (error) {
+      console.error('Error publicando notas:', error);
+      toast.error('Error al publicar las notas.', { id: toastId });
+    } finally {
+      setIsPublishingNotes(false);
     }
   };
 
@@ -303,17 +351,26 @@ export default function ProfesorTareas() {
             tareasFiltradas.map(tarea => {
               const porcentaje = tarea.total > 0 ? Math.round((tarea.entregas / tarea.total) * 100) : 0;
               return (
-                <div key={tarea.id} className="group relative border border-gray-200 rounded-2xl p-6 bg-white dark:bg-gray-800 flex flex-col h-full shadow-sm">
-                  <div className={`absolute top-0 left-0 w-full h-1.5 ${tarea.estado === 'Activa' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                  <div className="flex justify-between items-start mb-4 mt-1">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-green-50 text-green-700 border border-green-200">{tarea.estado}</span>
-                    <span className="text-xs font-bold text-gray-500">{porcentaje}% Entregado</span>
+                <div key={tarea.id} className="group relative border border-gray-100 dark:border-gray-700/60 rounded-2xl p-6 bg-white dark:bg-gray-800/80 backdrop-blur-sm flex flex-col h-full shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${tarea.estado === 'Activa' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 border border-gray-200 dark:border-gray-600'}`}>
+                      {tarea.estado === 'Activa' && <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>}
+                      {tarea.estado}
+                    </span>
+                    <span className="text-xs font-bold text-gray-400 dark:text-gray-500">{porcentaje}% Entregado</span>
                   </div>
-                  <h3 className="font-extrabold text-gray-800 dark:text-white text-base leading-tight mb-1">{tarea.titulo}</h3>
-                  <p className="text-xs text-gray-400 font-medium mb-4">{tarea.curso} • {tarea.asignatura}</p>
+                  <h3 className="font-extrabold text-gray-800 dark:text-white text-lg tracking-tight leading-tight mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{tarea.titulo}</h3>
+                  <p className="text-xs text-gray-400 font-medium mb-5">{tarea.curso} <span className="mx-1 opacity-50">•</span> {tarea.asignatura}</p>
+                  
                   <div className="mt-auto space-y-3">
-                    <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded-lg">Vence: <b>{formatDate(tarea.fechaEntrega)}</b></div>
-                    <button onClick={() => abrirDetalles(tarea)} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all">Revisar Entregas ({tarea.entregas}/{tarea.total})</button>
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-900/30 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700/50">
+                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      <span>Vence: <b className="text-gray-700 dark:text-gray-300 ml-1">{formatDate(tarea.fechaEntrega)}</b></span>
+                    </div>
+                    <button onClick={() => abrirDetalles(tarea)} className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-bold rounded-xl shadow-md shadow-blue-500/25 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2">
+                      Revisar Entregas
+                      <span className="bg-white/20 px-2 py-0.5 rounded-md text-xs">{tarea.entregas}/{tarea.total}</span>
+                    </button>
                   </div>
                 </div>
               )
@@ -323,36 +380,58 @@ export default function ProfesorTareas() {
       </div>
 
       {/* ======================================================= */}
-      {/* 🚀 NUEVA SALA DE CALIFICACIÓN (MODO GOOGLE CLASSROOM) 🚀 */}
-      {/* ======================================================= */}
       {isDetallesOpen && tareaSeleccionada && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 animate-fade-in">
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-gray-900/50 transition-opacity"
+          onClick={() => setIsDetallesOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl w-full max-w-6xl h-[88vh] flex flex-col overflow-hidden animate-fade-in border border-gray-200 dark:border-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
 
-            {/* Encabezado Superior del Dashboard */}
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-black text-gray-800 dark:text-white">Sala de Corrección: {tareaSeleccionada.titulo}</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{tareaSeleccionada.curso} • {tareaSeleccionada.asignatura}</p>
+            {/* Encabezado Superior */}
+            <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-900">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{tareaSeleccionada.titulo}</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">{tareaSeleccionada.curso} <span className="mx-1.5 opacity-50">•</span> {tareaSeleccionada.asignatura}</p>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
                 
-                {/* Botón Exportar Estandarizado */}
+                {/* Botón Publicar Notas */}
                 <button 
-                  onClick={exportarExcel} 
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+                  onClick={publicarNotasLibro}
+                  disabled={isPublishingNotes}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                  Exportar Planilla
+                  {isPublishingNotes ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                  )}
+                  Publicar Notas
                 </button>
 
-                {/* Botón Cerrar Estandarizado */}
+                {/* Botón Exportar */}
+                <button 
+                  onClick={exportarExcel} 
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl text-sm font-bold transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                  Exportar
+                </button>
+
+                {/* Botón Cerrar */}
                 <button 
                   onClick={() => setIsDetallesOpen(false)} 
-                  className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-bold shadow-sm transition-colors"
+                  className="p-2.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl text-gray-500 dark:text-gray-400 transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                  Cerrar Sala
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
                 
               </div>
@@ -363,25 +442,36 @@ export default function ProfesorTareas() {
               {isLoadingDetalles && (
                 <BackdropLoader mensaje="Cargando entregas..." />
               )}
-                {/* PANEL IZQUIERDO (35%): Lista de Alumnos */}
-                <div className="w-[35%] border-r border-gray-200 dark:border-gray-700 overflow-y-auto bg-gray-50/50 dark:bg-gray-900/20 divide-y divide-gray-100 dark:divide-gray-700 custom-scrollbar">
+                {/* PANEL IZQUIERDO (30%): Lista de Alumnos */}
+                <div className="w-[35%] lg:w-[30%] border-r border-gray-100 dark:border-gray-800 overflow-y-auto bg-white dark:bg-gray-900 custom-scrollbar py-4 px-2">
                   {alumnosTarea.map(al => {
                     const esActivo = alumnoSeleccionado?.id === al.id;
                     return (
                       <div
                         key={al.id}
                         onClick={() => handleSeleccionarAlumno(al)}
-                        className={`p-3.5 flex items-center justify-between cursor-pointer transition-all ${esActivo ? 'bg-blue-50 dark:bg-blue-900/40 border-l-4 border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
+                        className={`mx-2 my-1.5 p-3 flex items-center justify-between cursor-pointer transition-colors rounded-2xl border ${esActivo ? 'bg-white dark:bg-gray-800 border-indigo-100 dark:border-indigo-900/50 shadow-sm' : 'bg-transparent border-transparent hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
                       >
-                        <div className="flex items-center gap-2.5 truncate max-w-[70%]">
-                          <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${al.estado === 'Entregado' ? 'bg-green-500' : al.estado === 'Atrasado' ? 'bg-red-500' : 'bg-orange-400'}`}></div>
-                          <p className={`text-xs font-bold truncate ${esActivo ? 'text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'}`}>{al.nombre}</p>
+                        <div className="flex items-center gap-3 truncate max-w-[80%]">
+                          <div className={`relative flex items-center justify-center w-10 h-10 rounded-full shrink-0 overflow-hidden ${al.estado === 'Entregado' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400' : al.estado === 'Atrasado' ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400' : 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'}`}>
+                            {al.avatar_url ? (
+                              <img src={al.avatar_url} alt={al.nombre} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-sm font-black">{al.nombre.charAt(0)}</span>
+                            )}
+                          </div>
+                          <div className="truncate">
+                            <p className={`text-sm font-bold truncate ${esActivo ? 'text-indigo-900 dark:text-indigo-400' : 'text-gray-800 dark:text-gray-200'}`}>{al.nombre}</p>
+                            <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase mt-0.5">{al.estado}</p>
+                          </div>
                         </div>
                         <div className="text-right shrink-0">
                           {al.nota ? (
-                            <span className="text-[11px] font-black bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded">{al.nota}</span>
+                            <span className="text-xs font-bold text-gray-900 dark:text-white px-1.5">{al.nota}</span>
                           ) : (
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">{al.estado}</span>
+                            <span className="text-gray-300 dark:text-gray-600">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </span>
                           )}
                         </div>
                       </div>
@@ -389,81 +479,110 @@ export default function ProfesorTareas() {
                   })}
                 </div>
 
-                {/* PANEL DERECHO (65%): Espacio de Trabajo e Inspección del Alumno */}
-                <div className="w-[65%] p-6 overflow-y-auto bg-white dark:bg-gray-800 custom-scrollbar">
+                {/* PANEL DERECHO (70%): Espacio de Trabajo e Inspección del Alumno */}
+                <div className="w-[65%] lg:w-[70%] p-8 lg:p-12 overflow-y-auto bg-white dark:bg-gray-900 custom-scrollbar">
                   {alumnoSeleccionado ? (
-                    <div className="space-y-6">
+                    <div className="space-y-8 max-w-4xl mx-auto">
 
                       {/* Cabecera Alumno Activo */}
-                      <div className="border-b pb-4 border-gray-100 dark:border-gray-700">
-                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Estudiante Seleccionado</span>
-                        <h3 className="text-xl font-black text-gray-800 dark:text-white mt-0.5">{alumnoSeleccionado.nombre}</h3>
-                        <p className="text-xs text-gray-400">RUT: {alumnoSeleccionado.id} &nbsp;|&nbsp; Estado: <b className={alumnoSeleccionado.estado === 'Entregado' ? 'text-green-500' : 'text-orange-500'}>{alumnoSeleccionado.estado}</b></p>
+                      <div className="flex items-center gap-5 border-b pb-8 border-gray-100 dark:border-gray-800">
+                        <div className="w-20 h-20 rounded-3xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-500 text-3xl font-black overflow-hidden shrink-0">
+                          {alumnoSeleccionado.avatar_url ? (
+                            <img src={alumnoSeleccionado.avatar_url} alt={alumnoSeleccionado.nombre} className="w-full h-full object-cover" />
+                          ) : (
+                            alumnoSeleccionado.nombre.charAt(0)
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded-md">Revisión de Estudiante</span>
+                          <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-2 leading-none">{alumnoSeleccionado.nombre}</h3>
+                          <div className="flex items-center gap-3 mt-3 text-xs font-medium text-gray-500">
+                            <span className="flex items-center gap-1.5"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" /></svg> RUT: {alumnoSeleccionado.id}</span>
+                            <span className="opacity-40">•</span>
+                            <span className={alumnoSeleccionado.estado === 'Entregado' ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-amber-600 dark:text-amber-400 font-bold'}>Estado: {alumnoSeleccionado.estado}</span>
+                          </div>
+                        </div>
                       </div>
 
                       {/* Cuerpo de la Entrega */}
                       {alumnoSeleccionado.estado === 'Entregado' ? (
                         <div className="space-y-6">
 
-                          {/* Comentario */}
-                          {alumnoSeleccionado.comentario && (
-                            <div className="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
-                              <h4 className="text-xs font-bold text-gray-500 uppercase mb-1">Mensaje o Comentario del Alumno:</h4>
-                              <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{alumnoSeleccionado.comentario}"</p>
+                          {/* Archivo Adjunto */}
+                          {alumnoSeleccionado.archivo_url ? (
+                            <div className="p-6 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-[1.5rem] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                              <div className="flex items-center gap-4">
+                                <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl text-indigo-600 dark:text-indigo-400 shadow-sm border border-indigo-100 dark:border-indigo-800/30">
+                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                                </div>
+                                <div>
+                                  <p className="text-base font-bold text-gray-900 dark:text-white">Documento Adjunto Cargado</p>
+                                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Subido el: {alumnoSeleccionado.fecha}</p>
+                                </div>
+                              </div>
+                              <a href={alumnoSeleccionado.archivo_url} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-900 dark:text-white font-bold text-sm rounded-xl transition-colors text-center flex justify-center items-center gap-2">
+                                Abrir Documento
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                              </a>
+                            </div>
+                          ) : (
+                            <div className="p-4 bg-amber-50 dark:bg-amber-900/10 text-amber-800 dark:text-amber-400 rounded-2xl text-sm font-medium flex items-center gap-3">
+                              <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                              El alumno marcó la tarea como entregada pero no adjuntó ningún archivo.
                             </div>
                           )}
 
-                          {/* Archivo Adjunto */}
-                          {alumnoSeleccionado.archivo_url ? (
-                            <div className="p-4 border-2 border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/30 dark:bg-indigo-900/10 rounded-xl flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-400">
-                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-bold text-indigo-900 dark:text-indigo-300">Archivo Adjunto Cargado</p>
-                                  <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">Entregado el: {alumnoSeleccionado.fecha}</p>
-                                </div>
-                              </div>
-                              <a href={alumnoSeleccionado.archivo_url} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/10 transition-colors">Abrir Documento 👁️</a>
-                            </div>
-                          ) : (
-                            <div className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 text-amber-800 dark:text-amber-400 rounded-xl text-xs font-bold">
-                              ⚠️ El alumno marcó la tarea como entregada pero no adjuntó ningún documento físico.
+                          {/* Comentario */}
+                          {alumnoSeleccionado.comentario && (
+                            <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-[1.5rem] relative">
+                              <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Mensaje del Estudiante</h4>
+                              <p className="text-sm text-gray-700 dark:text-gray-300 italic relative z-10 leading-relaxed">{alumnoSeleccionado.comentario}</p>
                             </div>
                           )}
 
                           {/* Sección de Calificación */}
-                          <div className="p-5 bg-gray-50 dark:bg-gray-900/30 border rounded-xl space-y-3 max-w-sm">
-                            <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Calificación Curricular (Decreto 67)</h4>
-                            <p className="text-[11px] text-gray-400">Puedes ingresar una nota oficial (Ej: 6.5) o la cantidad de décimas obtenidas (Ej: 3).</p>
-                            <div className="flex items-center gap-3 pt-1">
-                              <input
-                                type="number" step="0.1" placeholder="Ej: 7.0 o 5" value={notaInput}
-                                onChange={(e) => setNotaInput(e.target.value)}
-                                className="w-32 text-center text-sm font-black p-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                              />
+                          <div className="p-6 bg-white dark:bg-gray-800 rounded-[1.5rem] border border-gray-200 dark:border-gray-700 relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+                            <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-600"></div>
+                            <div className="pl-2">
+                              <h4 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Evaluación y Calificación</h4>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Ingresa la nota oficial curricular (Decreto 67) o décimas formativas.</p>
+                            </div>
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
+                              <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 font-bold text-sm">Nota</div>
+                                <input
+                                  type="number" step="0.1" placeholder="Ej: 7.0" value={notaInput}
+                                  onChange={(e) => setNotaInput(e.target.value)}
+                                  className="w-32 pl-14 pr-4 py-3 text-base font-black bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-gray-800 transition-colors outline-none"
+                                />
+                              </div>
                               <button
                                 onClick={handleGuardarNota} disabled={isSavingNota}
-                                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md"
+                                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-colors shrink-0 disabled:opacity-50"
                               >
-                                {isSavingNota ? 'Guardando...' : 'Registrar'}
+                                {isSavingNota ? 'Guardando...' : 'Registrar Calificación'}
                               </button>
                             </div>
                           </div>
 
                         </div>
                       ) : (
-                        <div className="py-12 text-center text-gray-400">
-                          <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                          <p className="text-sm font-bold">El alumno aún no ha realizado la entrega</p>
-                          <p className="text-xs text-gray-400 mt-1">Su estado actual figura como: <b>{alumnoSeleccionado.estado}</b></p>
+                        <div className="py-20 flex flex-col items-center justify-center text-center">
+                          <div className="w-16 h-16 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-300 dark:text-gray-600 mb-4">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          </div>
+                          <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Sin Entrega Activa</h4>
+                          <p className="text-sm text-gray-500 max-w-sm">El estudiante aún no ha enviado su respuesta.</p>
                         </div>
                       )}
 
                     </div>
                   ) : (
-                    <div className="h-full flex justify-center items-center text-gray-400 text-sm">Selecciona un alumno del panel izquierdo para comenzar a revisar.</div>
+                    <div className="h-full flex flex-col justify-center items-center text-gray-400">
+                      <svg className="w-16 h-16 text-gray-200 dark:text-gray-700 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" /></svg>
+                      <p className="text-base font-bold text-gray-600 dark:text-gray-400">Ningún estudiante seleccionado</p>
+                      <p className="text-sm mt-1">Haz clic en un alumno de la lista para revisar su entrega.</p>
+                    </div>
                   )}
                 </div>
 

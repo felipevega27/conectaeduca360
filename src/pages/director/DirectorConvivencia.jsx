@@ -9,6 +9,7 @@ import { saveAs } from 'file-saver';
 import logoImg from '../../assets/logo.png'; // <-- LOGO PRINCIPAL
 import toast, { Toaster } from 'react-hot-toast';
 import { SkeletonRow } from '../../components/SkeletonLoader';
+import { perteneceAlSemestre } from '../../utils/dateUtils';
 
 export default function DirectorConvivencia() {
   const chartTiposRef = useRef(null);
@@ -53,19 +54,7 @@ export default function DirectorConvivencia() {
 
       if (errCasos) throw errCasos;
 
-      const getMesesSemestre = (semestre) => {
-        if (semestre === 'Primer Semestre') return [2, 3, 4, 5, 6]; 
-        if (semestre === 'Segundo Semestre') return [7, 8, 9, 10, 11]; 
-        return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-      };
-      const mesesValidos = getMesesSemestre(semestreActivo);
-      const perteneceAlSemestre = (fechaString) => {
-        if (!fechaString) return false;
-        const mesStr = fechaString.includes('T') ? fechaString.split('T')[0].split('-')[1] : fechaString.split('-')[1];
-        return mesesValidos.includes(parseInt(mesStr, 10) - 1);
-      };
-
-      const casosData = casosDataRaw?.filter(c => perteneceAlSemestre(c.fecha_reporte)) || [];
+      const casosData = casosDataRaw?.filter(c => perteneceAlSemestre(c.fecha_reporte, semestreActivo)) || [];
 
       const { data: perfilesData, error: errPerf } = await supabase
         .from('perfiles')

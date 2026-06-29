@@ -78,17 +78,34 @@ export default function ProfesorAsistencia() {
                     leccionariosMap[lec.id_horario] = lec.firmado;
                 });
 
-                // Formatear para que coincida con la estructura esperada por selectedClase
-                const clasesFormateadas = horariosHoy.map(h => ({
-                    id: h.id,
-                    id_curso: h.id_curso,
-                    id_asignatura: h.id_asignatura,
-                    bloque: h.bloque,
-                    hora: `${h.hora_inicio.substring(0, 5)} - ${h.hora_fin.substring(0, 5)}`,
-                    curso: h.cursos?.nombre || 'Curso Desconocido',
-                    asignatura: h.asignaturas?.nombre || 'Asignatura Desconocida',
-                    sala: h.sala || 'Sala Asignada',
-                    leccionarioFirmado: !!leccionariosMap[h.id]
+                const clasesMap = {};
+                horariosHoy.forEach(h => {
+                    const bloque = h.bloque;
+                    if (!clasesMap[bloque]) {
+                        clasesMap[bloque] = {
+                            id: [h.id],
+                            id_curso: [h.id_curso],
+                            id_asignatura: h.id_asignatura,
+                            bloque: h.bloque,
+                            hora: `${h.hora_inicio.substring(0, 5)} - ${h.hora_fin.substring(0, 5)}`,
+                            curso: [h.cursos?.nombre || 'Curso Desconocido'],
+                            asignatura: h.asignaturas?.nombre || 'Asignatura Desconocida',
+                            sala: [h.sala || 'Sala Asignada'],
+                            leccionarioFirmado: !!leccionariosMap[h.id]
+                        };
+                    } else {
+                        clasesMap[bloque].id.push(h.id);
+                        if (!clasesMap[bloque].id_curso.includes(h.id_curso)) clasesMap[bloque].id_curso.push(h.id_curso);
+                        if (!clasesMap[bloque].curso.includes(h.cursos?.nombre)) clasesMap[bloque].curso.push(h.cursos?.nombre || 'Curso Desconocido');
+                        if (!clasesMap[bloque].sala.includes(h.sala)) clasesMap[bloque].sala.push(h.sala || 'Sala Asignada');
+                        if (leccionariosMap[h.id]) clasesMap[bloque].leccionarioFirmado = true;
+                    }
+                });
+
+                const clasesFormateadas = Object.values(clasesMap).map(c => ({
+                    ...c,
+                    curso: c.curso.join(', '),
+                    sala: c.sala.join(', ')
                 }));
                 setClasesHoy(clasesFormateadas);
             }
@@ -103,10 +120,11 @@ export default function ProfesorAsistencia() {
         setIsLoading(true);
         try {
             // 1. Obtener Matrículas del curso
+            const cursosIds = Array.isArray(selectedClase.id_curso) ? selectedClase.id_curso : [selectedClase.id_curso];
             const { data: matriculas } = await supabase
                 .from('matriculas')
-                .select('rut_alumno, condicion_estudiante')
-                .eq('id_curso', selectedClase.id_curso);
+                .select('rut_alumno, condicion_estudiante, id_curso')
+                .in('id_curso', cursosIds);
 
             const ruts = matriculas?.map(m => m.rut_alumno) || [];
             const { data: perfiles } = await supabase.from('perfiles').select('rut, nombre').in('rut', ruts);
@@ -116,7 +134,7 @@ export default function ProfesorAsistencia() {
             const { data: asistenciaPrevia } = await supabase
                 .from('asistencia_alumnos')
                 .select('*')
-                .eq('id_curso', selectedClase.id_curso)
+                .in('id_curso', cursosIds)
                 .eq('fecha', hoyISO);
 
             const asistenciaMap = {};
@@ -136,7 +154,8 @@ export default function ProfesorAsistencia() {
                         rut: m.rut_alumno,
                         nombre: perfil?.nombre || 'Sin Nombre',
                         pie: pie,
-                        estado: asistenciaMap[m.rut_alumno] || estadoDefecto
+                        estado: asistenciaMap[m.rut_alumno] || estadoDefecto,
+                        id_curso: m.id_curso
                     };
                 });
 
@@ -147,11 +166,13 @@ export default function ProfesorAsistencia() {
             }
 
             // 4. Obtener leccionario previo si existe
+            const horariosIds = Array.isArray(selectedClase.id) ? selectedClase.id : [selectedClase.id];
             const { data: leccionarioPrevio } = await supabase
                 .from('leccionarios')
                 .select('id, descripcion_actividad, firmado')
-                .eq('id_horario', selectedClase.id)
+                .in('id_horario', horariosIds)
                 .eq('fecha', hoyISO)
+                .limit(1)
                 .maybeSingle();
 
             if (leccionarioPrevio) {
@@ -245,31 +266,32 @@ export default function ProfesorAsistencia() {
             // 1. Guardar/Actualizar Asistencias
             const upsertAsistencias = alumnos.map(a => ({
                 rut_alumno: a.rut,
-                id_curso: selectedClase.id_curso,
+                id_curso: a.id_curso,
                 fecha: hoyISO,
                 estado: a.estado === 'P' ? 'Presente' : (a.estado === 'A' ? 'Ausente' : 'Atraso'),
                 rut_profesor_registro: rutProfesor
             }));
 
-            await supabase.from('asistencia_alumnos').delete().eq('id_curso', selectedClase.id_curso).eq('fecha', hoyISO);
+            const cursosIds = Array.isArray(selectedClase.id_curso) ? selectedClase.id_curso : [selectedClase.id_curso];
+            await supabase.from('asistencia_alumnos').delete().in('id_curso', cursosIds).eq('fecha', hoyISO);
             const { error: errorAsis } = await supabase.from('asistencia_alumnos').insert(upsertAsistencias);
             if (errorAsis) throw errorAsis;
 
             // 2. Firmar Leccionario
-            if (leccionarioId) {
-                await supabase.from('leccionarios').update({
-                    descripcion_actividad: leccionario,
-                    firmado: true
-                }).eq('id', leccionarioId);
-            } else {
-                await supabase.from('leccionarios').insert([{
-                    id_horario: selectedClase.id,
-                    fecha: hoyISO,
-                    descripcion_actividad: leccionario,
-                    firmado: true,
-                    rut_profesor: rutProfesor
-                }]);
-            }
+            const horariosIds = Array.isArray(selectedClase.id) ? selectedClase.id : [selectedClase.id];
+            
+            await supabase.from('leccionarios').delete().in('id_horario', horariosIds).eq('fecha', hoyISO);
+            
+            const leccionariosToInsert = horariosIds.map(hid => ({
+                id_horario: hid,
+                fecha: hoyISO,
+                descripcion_actividad: leccionario,
+                firmado: true,
+                rut_profesor: rutProfesor
+            }));
+            
+            const { error: errLec } = await supabase.from('leccionarios').insert(leccionariosToInsert);
+            if (errLec) throw errLec;
 
             // NOTIFICAR AL DIRECTOR
             await notificarPorRol(
