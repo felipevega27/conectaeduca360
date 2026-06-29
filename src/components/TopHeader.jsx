@@ -163,7 +163,7 @@ export default function TopHeader({
       const uRol = (result.rol || result.role || '').toLowerCase().trim();
       
       if (userRoleStr === 'director' || userRoleStr === 'administrador') {
-         if (uRol.includes('profesor') || uRol.includes('docente')) {
+         if (uRol.includes('profesor') || uRol.includes('docente') || uRol.includes('especialista')) {
            navigate('/panel/director/ficha-docente', { state: { docenteSeleccionado: { id: result.rut } } });
          } else if (uRol.includes('apoderado')) {
            navigate(`/panel/director/apoderado/${result.rut}`); 
@@ -174,7 +174,7 @@ export default function TopHeader({
          }
       } else {
          // Para profesores (y otros roles)
-         if (uRol.includes('profesor') || uRol.includes('docente')) {
+         if (uRol.includes('profesor') || uRol.includes('docente') || uRol.includes('especialista')) {
            navigate(`/panel/${userRoleStr}/ficha-docente`, { state: { docenteSeleccionado: { id: result.rut } } });
          } else {
            navigate(`/panel/${userRoleStr}/perfil-usuario/${result.rut}`);

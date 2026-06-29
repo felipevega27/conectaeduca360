@@ -277,7 +277,7 @@ export default function ProfesorAsistencia() {
                 'alerta', 
                 'Asistencia y Leccionario Cerrado', 
                 `El docente ${loggedUser.nombre || loggedUser.rut} ha firmado y cerrado la asistencia de ${selectedClase.curso} en ${selectedClase.asignatura}.`, 
-                '/panel/director/asistencia'
+                '/panel/director/alertas-asistencia'
             );
 
             toast.success('Clase firmada y asistencia registrada.', { id: toastId });

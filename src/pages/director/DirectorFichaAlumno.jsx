@@ -76,7 +76,7 @@ export default function DirectorPerfilAlumno() {
         apoderadoInfo = { ...relacion, nombre: perfilApoderado?.nombre };
       }
 
-      const { data: notas } = await supabase.from('notas').select('*, asignaturas(nombre)').eq('rut_alumno', rutAlumno).order('fecha', { ascending: false });
+      const { data: notas } = await supabase.from('notas').select('*, asignaturas(nombre), evaluaciones(nombre)').eq('rut_alumno', rutAlumno).order('fecha', { ascending: false });
       const { data: asistencia } = await supabase.from('asistencia_alumnos').select('*').eq('rut_alumno', rutAlumno).order('fecha', { ascending: false });
       
       // Obtener tanto Casos Formales como Anotaciones Simples (sin inner joins para evitar errores de FK)
@@ -403,7 +403,7 @@ export default function DirectorPerfilAlumno() {
                       data.notas.map(n => (
                         <tr key={n.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                           <td className="px-6 py-4 font-semibold text-gray-800 dark:text-gray-200">{n.asignaturas?.nombre || 'Desconocida'}</td>
-                          <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{n.tipo_evaluacion}</td>
+                          <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{n.evaluaciones?.nombre || n.tipo_evaluacion}</td>
                           <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{new Date(n.fecha).toLocaleDateString('es-CL')}</td>
                           <td className={`px-6 py-4 text-right font-black text-lg ${Number(n.nota) < 4.0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>{n.nota}</td>
                         </tr>

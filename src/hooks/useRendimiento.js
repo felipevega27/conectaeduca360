@@ -26,6 +26,9 @@ export function useRendimiento(semestreActivo = 'Primer Semestre') {
       const { data: profes } = await supabase.from('perfiles').select('*').eq('rol', 'profesor');
 
       if (!notas || notas.length === 0) {
+        setPromedioGeneral('0.0');
+        setCursosEnRiesgo([]);
+        setChartDataBar({ labels: [], data: [], colors: [] });
         setIsLoading(false);
         return;
       }
