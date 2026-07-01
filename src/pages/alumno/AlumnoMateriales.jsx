@@ -8,6 +8,7 @@ export default function AlumnoMateriales() {
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [comentario, setComentario] = useState('');
+  const [archivo, setArchivo] = useState(null);
 
   const [asignaturas, setAsignaturas] = useState(['Todas']);
   const [materiales, setMateriales] = useState([]);
@@ -73,6 +74,7 @@ export default function AlumnoMateriales() {
             descripcion: t.descripcion,
             vence: fEntrega.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' }),
             estado: entregado ? 'Entregado' : 'Pendiente',
+            nota: entregasMap[t.id]?.nota || null,
             archivo_url: t.archivo_url
           };
         });
@@ -133,12 +135,30 @@ export default function AlumnoMateriales() {
       const loggedUserJSON = localStorage.getItem('userLogged');
       const user = JSON.parse(loggedUserJSON);
 
+      let publicUrl = null;
+      if (archivo) {
+        const fileExt = archivo.name.split('.').pop();
+        const fileName = `${user.rut.replace(/[^0-9kK]/g, '')}_${tareaSeleccionada.id}_${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('tareas')
+          .upload(fileName, archivo);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+          .from('tareas')
+          .getPublicUrl(fileName);
+        
+        publicUrl = data.publicUrl;
+      }
+
       const { error } = await supabase
         .from('entregas_tareas')
         .insert({
           id_tarea: tareaSeleccionada.id,
           rut_alumno: user.rut,
-          archivo_url: 'https://ejemplo.com/archivo.pdf', // Simulado
+          archivo_url: publicUrl,
           comentario: comentario || null
         });
 
@@ -147,6 +167,7 @@ export default function AlumnoMateriales() {
       alert('¡Tarea enviada con éxito al profesor!');
       setIsModalOpen(false);
       setComentario('');
+      setArchivo(null);
       cargarAulaVirtual(user.rut); // Recargar
     } catch (err) {
       console.error(err);
@@ -232,10 +253,17 @@ export default function AlumnoMateriales() {
                     Subir Trabajo
                   </button>
                 ) : (
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
-                    Entregado
-                  </span>
+                  <div className="flex items-center gap-3">
+                    {tarea.nota && (
+                      <span className="text-xs font-bold text-indigo-700 bg-indigo-100 dark:bg-indigo-900/40 dark:text-indigo-300 px-2.5 py-1 rounded-md border border-indigo-200 dark:border-indigo-800">
+                        Nota: {tarea.nota}
+                      </span>
+                    )}
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                      Entregado
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -322,12 +350,28 @@ export default function AlumnoMateriales() {
 
               <div>
                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Archivo a entregar</label>
-                <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group">
-                  <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-3 group-hover:scale-110 transition-transform">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-                  </div>
-                  <p className="text-sm font-bold text-gray-700 dark:text-gray-300">Haz clic para buscar tu archivo</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Soporta Word, PDF, Excel o Imágenes</p>
+                <div className="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group">
+                  <input 
+                    type="file" 
+                    onChange={(e) => setArchivo(e.target.files[0])} 
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                  />
+                  {archivo ? (
+                    <div className="flex flex-col items-center">
+                      <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                      </div>
+                      <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{archivo.name}</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-3 group-hover:scale-110 transition-transform">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                      </div>
+                      <p className="text-sm font-bold text-gray-700 dark:text-gray-300">Haz clic para buscar tu archivo</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Soporta Word, PDF, Excel o Imágenes</p>
+                    </>
+                  )}
                 </div>
               </div>
 

@@ -37,6 +37,7 @@ import AlumnoAsistencia from './pages/alumno/AlumnoAsistencia';
 import AlumnoAnotaciones from './pages/alumno/AlumnoAnotaciones';
 import AlumnoHorario from './pages/alumno/AlumnoHorario';
 import AlumnoMateriales from './pages/alumno/AlumnoMateriales';
+import AlumnoDocumentos from './pages/alumno/AlumnoDocumentos';
 import ApoderadoDashboard from './pages/apoderado/ApoderadoDashboard';
 import ApoderadoRendimiento from './pages/apoderado/ApoderadoRendimiento';
 import ApoderadoAsistencia from './pages/apoderado/ApoderadoAsistencia';
@@ -161,6 +162,8 @@ function App() {
             <Route path="/panel/alumno/horario" element={<AlumnoHorario />} />
             {/* NUEVA RUTA AQUÍ */}
             <Route path="/panel/alumno/materiales" element={<AlumnoMateriales />} />
+            {/* NUEVA RUTA AQUÍ */}
+            <Route path="/panel/alumno/documentos" element={<AlumnoDocumentos />} />
           </Route>
         </Route>
 

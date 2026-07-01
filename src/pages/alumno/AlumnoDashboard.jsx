@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import { useNavigate } from 'react-router-dom';
+import { useReactToPrint } from 'react-to-print';
+import CertificadoAlumnoRegular from '../../components/documentos/CertificadoAlumnoRegular';
 
 export default function AlumnoDashboard() {
   const [user, setUser] = useState(null);
@@ -11,13 +13,25 @@ export default function AlumnoDashboard() {
     cursoNombre: 'Cargando...',
     asistencia: 0,
     promedioGeneral: 0,
-    anotacionesNegativas: 0
+    anotacionesNegativas: 0,
+    anotacionesPositivas: 0,
+    faltasInjustificadas: 0
   });
 
   const [ultimasNotas, setUltimasNotas] = useState([]);
   const [avisosMuro, setAvisosMuro] = useState([]);
   const [anotaciones, setAnotaciones] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Estados y refs para Certificado
+  const [alumnoInfo, setAlumnoInfo] = useState(null);
+  const [configColegio, setConfigColegio] = useState(null);
+  const certificadoRef = useRef(null);
+
+  const handlePrint = useReactToPrint({
+    contentRef: certificadoRef,
+    documentTitle: 'Certificado_Alumno_Regular',
+  });
 
   useEffect(() => {
     const loggedUserJSON = localStorage.getItem('userLogged');
@@ -48,12 +62,14 @@ export default function AlumnoDashboard() {
       // 2. Obtener Asistencia
       const { data: asistencias } = await supabase
         .from('asistencia_alumnos')
-        .select('estado')
+        .select('estado, justificado')
         .eq('rut_alumno', rutAlumno);
       
       let porcentajeAsistencia = 0;
+      let faltasInjustificadas = 0;
       if (asistencias && asistencias.length > 0) {
-        const presentes = asistencias.filter(a => a.estado.toLowerCase() === 'presente' || a.estado.toLowerCase() === 'atrasado').length;
+        const presentes = asistencias.filter(a => a.estado.toLowerCase() === 'presente' || a.estado.toLowerCase() === 'atraso').length;
+        faltasInjustificadas = asistencias.filter(a => a.estado.toLowerCase() === 'ausente' && a.justificado !== true).length;
         porcentajeAsistencia = Math.round((presentes / asistencias.length) * 100);
       }
 
@@ -65,9 +81,11 @@ export default function AlumnoDashboard() {
         .order('fecha', { ascending: false });
       
       let negativasCount = 0;
+      let positivasCount = 0;
       let ultimasAnot = [];
       if (anotacionesData) {
         negativasCount = anotacionesData.filter(a => a.tipo.toLowerCase() === 'negativa').length;
+        positivasCount = anotacionesData.filter(a => a.tipo.toLowerCase() === 'positiva').length;
         ultimasAnot = anotacionesData.slice(0, 3).map(a => ({
           id: a.id,
           tipo: a.tipo.toLowerCase(),
@@ -119,10 +137,12 @@ export default function AlumnoDashboard() {
       setUltimasNotas(notasRecientes);
 
       setAlumnoData({
-        cursoNombre,
+        cursoNombre: cursoNombre,
         asistencia: porcentajeAsistencia,
-        promedioGeneral: promedio,
-        anotacionesNegativas: negativasCount
+        promedioGeneral: parseFloat(promedio.toFixed(1)),
+        anotacionesNegativas: negativasCount,
+        anotacionesPositivas: positivasCount,
+        faltasInjustificadas: faltasInjustificadas
       });
 
       // 5. Obtener Avisos (Muro de Avisos del Curso)
@@ -137,6 +157,15 @@ export default function AlumnoDashboard() {
           setAvisosMuro(avisos);
         }
       }
+
+      // 6. Datos para el certificado
+      setAlumnoInfo({
+        rut: rutAlumno,
+        nombre: parsedUser.name || parsedUser.nombre,
+        curso: cursoNombre
+      });
+      const { data: config } = await supabase.from('configuracion_colegio').select('*').limit(1).maybeSingle();
+      setConfigColegio(config || {});
 
     } catch (error) {
       console.error('Error cargando datos del dashboard:', error);
@@ -161,8 +190,35 @@ export default function AlumnoDashboard() {
       
       {/* CABECERA PERSONALIZADA PARA EL ESTUDIANTE */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">¡Hola, {user ? (user.name || user.nombre).split(' ')[0] : 'Estudiante'}! 👋</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Este es tu rendimiento académico y tus tareas pendientes para esta semana.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">¡Hola, {user ? (user.name || user.nombre).split(' ')[0] : 'Estudiante'}! 👋</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Este es tu rendimiento académico y tus tareas pendientes para esta semana.</p>
+          </div>
+          <button 
+            onClick={handlePrint}
+            className="flex h-10 items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            Certificado Alumno Regular
+          </button>
+        </div>
+        
+        {/* ALERTA DE INASISTENCIAS SIN JUSTIFICAR */}
+        {alumnoData.faltasInjustificadas > 0 && (
+          <div className="mt-4 flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h3 className="text-sm font-bold text-red-800 dark:text-red-400">Inasistencias sin justificar</h3>
+                <p className="text-xs text-red-600 dark:text-red-300">Tienes {alumnoData.faltasInjustificadas} falta(s) pendiente(s) por justificar. Pide a tu apoderado que suba el certificado.</p>
+              </div>
+            </div>
+            <button onClick={() => navigate('/panel/alumno/asistencia')} className="text-xs font-bold text-red-700 bg-red-100 dark:bg-red-900/50 hover:bg-red-200 dark:hover:bg-red-800 px-4 py-2 rounded-lg transition-colors">
+              Ir a Asistencia
+            </button>
+          </div>
+        )}
       </div>
 
       {/* TARJETAS DE RESUMEN (KPIs) */}
@@ -194,10 +250,22 @@ export default function AlumnoDashboard() {
 
         {/* Tarjeta Convivencia */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center text-center hover:-translate-y-1 hover:shadow-lg transition-all">
-          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Anotaciones Negativas</p>
-          <h2 className={`text-3xl font-black ${alumnoData.anotacionesNegativas > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'}`}>
-            {alumnoData.anotacionesNegativas}
-          </h2>
+          <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Anotaciones</p>
+          <div className="flex gap-4">
+            <div className="flex flex-col items-center">
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Positivas</span>
+              <h2 className={`text-2xl font-black ${alumnoData.anotacionesPositivas > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                {alumnoData.anotacionesPositivas}
+              </h2>
+            </div>
+            <div className="w-px bg-gray-200 dark:bg-gray-700"></div>
+            <div className="flex flex-col items-center">
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Negativas</span>
+              <h2 className={`text-2xl font-black ${alumnoData.anotacionesNegativas > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>
+                {alumnoData.anotacionesNegativas}
+              </h2>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -311,6 +379,18 @@ export default function AlumnoDashboard() {
 
         </div>
       </div>
+
+      {/* COMPONENTE OCULTO PARA IMPRIMIR PDF */}
+      <div className="hidden">
+        <CertificadoAlumnoRegular 
+          ref={certificadoRef} 
+          alumno={alumnoInfo}
+          fechaEmision={new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })}
+          correlativo={Math.floor(Math.random() * 1000).toString().padStart(3, '0')}
+          config={configColegio}
+        />
+      </div>
+
     </div>
   );
 }

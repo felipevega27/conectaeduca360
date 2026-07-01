@@ -19,9 +19,13 @@ export default function AlumnoAsistencia() {
 
   // --- ESTADOS INTERACTIVOS ---
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [faltaSeleccionada, setFaltaSeleccionada] = useState('');
+  const [faltaSeleccionada, setFaltaSeleccionada] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // States for Justification
+  const [archivoCertificado, setArchivoCertificado] = useState(null);
+  const [motivoJustificacion, setMotivoJustificacion] = useState('');
 
   // --- DATOS REALES ---
   const [resumen, setResumen] = useState({
@@ -89,21 +93,21 @@ export default function AlumnoAsistencia() {
            const est = reg.estado.toLowerCase();
            if (est === 'presente') presentes++;
            if (est === 'ausente') ausentes++;
-           if (est === 'atrasado') atrasosCount++;
+           if (est === 'atraso') atrasosCount++;
            
-           if (est === 'ausente' || est === 'atrasado') {
+           if (est === 'ausente' || est === 'atraso') {
               hist.push({
                  id: reg.id,
                  fecha: new Date(reg.fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: '2-digit', month: 'long' }),
                  tipo: reg.estado,
-                 estado: 'Sin Justificar', // Por defecto hasta implementar tabla de justificaciones
-                 observacion: '-'
+                 estado: reg.justificado ? 'Justificada' : 'Sin Justificar',
+                 observacion: reg.observacion_justificacion || '-'
               });
            }
         });
         
         const total = presentes + ausentes + atrasosCount;
-        const porcentaje = total > 0 ? Math.round((presentes / total) * 100) : 100;
+        const porcentaje = total > 0 ? Math.round(((presentes + atrasosCount) / total) * 100) : 100;
         
         setResumen({
           porcentajeGlobal: porcentaje,
@@ -122,14 +126,55 @@ export default function AlumnoAsistencia() {
     }
   };
 
-  const handleUploadCertificado = (e) => {
+  const handleUploadCertificado = async (e) => {
     e.preventDefault();
+    if (!faltaSeleccionada) return alert("Selecciona una inasistencia para justificar.");
     setIsUploading(true);
-    setTimeout(() => {
-      setIsUploading(false);
-      setIsModalOpen(false);
+    
+    try {
+      let publicUrl = null;
+
+      if (archivoCertificado) {
+        const fileExt = archivoCertificado.name.split('.').pop();
+        const fileName = `${currentUser.rut.replace(/[^0-9kK]/g, '')}_falta_${faltaSeleccionada.id}_${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('certificados')
+          .upload(fileName, archivoCertificado);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+          .from('certificados')
+          .getPublicUrl(fileName);
+        
+        publicUrl = data.publicUrl;
+      }
+
+      // Update the record in asistencia_alumnos to mark it as justified
+      const { error } = await supabase
+        .from('asistencia_alumnos')
+        .update({
+          justificado: true,
+          archivo_justificacion_url: publicUrl,
+          observacion_justificacion: motivoJustificacion
+        })
+        .eq('id', faltaSeleccionada.id);
+
+      if (error) throw error;
+
       alert('Certificado enviado exitosamente a Inspectoría.');
-    }, 1500);
+      setIsModalOpen(false);
+      setArchivoCertificado(null);
+      setMotivoJustificacion('');
+      setFaltaSeleccionada(null);
+      cargarDatos(currentUser.rut);
+    } catch (err) {
+      console.error(err);
+      alert('Hubo un error al enviar la justificación. Asegúrate de que el backend soporte estas columnas (justificado, archivo_justificacion_url, observacion_justificacion).');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   if (isLoading) {
@@ -156,7 +201,12 @@ export default function AlumnoAsistencia() {
         {/* REGLA LEGAL: SOLO EL APODERADO PUEDE VER EL BOTÓN DE JUSTIFICAR */}
         {userRole === 'apoderado' ? (
           <button 
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              // Automatically select the first unjustified absence if available
+              const firstUnjustified = historial.find(h => h.estado === 'Sin Justificar');
+              setFaltaSeleccionada(firstUnjustified || null);
+              setIsModalOpen(true);
+            }}
             className="flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
@@ -228,7 +278,7 @@ export default function AlumnoAsistencia() {
                       className={`w-9 h-9 flex items-center justify-center rounded-full text-sm font-semibold transition-all ${
                         dia.estado === 'presente' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-200 dark:ring-emerald-800/50' :
                         dia.estado === 'ausente' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 ring-1 ring-red-300 dark:ring-red-800/50 shadow-sm dark:shadow-none' :
-                        dia.estado === 'atrasado' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 ring-1 ring-amber-300 dark:ring-amber-800/50 shadow-sm dark:shadow-none' :
+                        dia.estado === 'atraso' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 ring-1 ring-amber-300 dark:ring-amber-800/50 shadow-sm dark:shadow-none' :
                         dia.estado === 'fin-de-semana' ? 'text-gray-300 dark:text-gray-600 bg-transparent' :
                         dia.estado === 'futuro' ? 'text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700' :
                         'text-gray-400 dark:text-gray-500 bg-transparent border border-dashed border-gray-300 dark:border-gray-600' 
@@ -278,7 +328,10 @@ export default function AlumnoAsistencia() {
                   {/* REGLA LEGAL: SOLO APODERADO VE ESTE BOTÓN */}
                   {item.estado === 'Sin Justificar' && userRole === 'apoderado' && (
                     <button 
-                      onClick={() => setIsModalOpen(true)}
+                      onClick={() => {
+                        setFaltaSeleccionada(item);
+                        setIsModalOpen(true);
+                      }}
                       className="mt-3 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1 transition-colors"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
@@ -295,7 +348,89 @@ export default function AlumnoAsistencia() {
       {/* --- MODAL PARA SUBIR CERTIFICADO (Mismo diseño premium anterior) --- */}
       {isModalOpen && userRole === 'apoderado' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm px-4">
-           {/* ... el código del modal se mantiene igual ... */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in-up border border-gray-200 dark:border-gray-700 relative">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                Justificar Falta
+              </h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleUploadCertificado} className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Inasistencia a justificar</label>
+                <select 
+                  value={faltaSeleccionada?.id || ''} 
+                  onChange={(e) => {
+                    const found = historial.find(h => h.id.toString() === e.target.value);
+                    setFaltaSeleccionada(found || null);
+                  }}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+                  required
+                >
+                  <option value="" disabled>Seleccione una inasistencia...</option>
+                  {historial.filter(h => h.estado === 'Sin Justificar').map(h => (
+                    <option key={h.id} value={h.id}>{h.fecha} - {h.tipo}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Certificado Médico u otro (Opcional)</label>
+                <div className="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group">
+                  <input 
+                    type="file" 
+                    onChange={(e) => setArchivoCertificado(e.target.files[0])} 
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                  />
+                  {archivoCertificado ? (
+                    <div className="flex flex-col items-center">
+                      <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                      </div>
+                      <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{archivoCertificado.name}</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-3 group-hover:scale-110 transition-transform">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                      </div>
+                      <p className="text-sm font-bold text-gray-700 dark:text-gray-300">Haz clic para adjuntar certificado</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Soporta PDF o Imágenes</p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Motivo / Observación</label>
+                <textarea 
+                  rows="3" 
+                  value={motivoJustificacion}
+                  onChange={(e) => setMotivoJustificacion(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+                  placeholder="Ej: Problemas de salud, asistencia a médico, etc."
+                  required
+                ></textarea>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isUploading}
+                  className="flex-1 py-2.5 rounded-xl font-bold text-white shadow-lg transition-colors flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 shadow-blue-600/20 disabled:bg-blue-400 disabled:shadow-none disabled:cursor-not-allowed"
+                >
+                  {isUploading ? 'Enviando...' : 'Enviar Justificación'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

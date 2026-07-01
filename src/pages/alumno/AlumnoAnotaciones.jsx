@@ -36,6 +36,7 @@ export default function AlumnoAnotaciones() {
         });
         setAnotaciones(formateadas);
       }
+
     } catch (err) {
       console.error('Error cargando anotaciones:', err);
     } finally {
@@ -67,13 +68,6 @@ export default function AlumnoAnotaciones() {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Hoja de Vida Escolar</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Historial oficial de convivencia y desarrollo personal (RICE).</p>
         </div>
-        <button 
-          onClick={() => alert('Generando documento PDF oficial...')}
-          className="flex h-10 items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-        >
-          <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-          Descargar Certificado
-        </button>
       </div>
 
       {/* KPI'S RESUMEN */}
@@ -173,6 +167,7 @@ export default function AlumnoAnotaciones() {
         </div>
 
       </div>
+
     </div>
   );
 }
