@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 
+// Componentes
+import RecoverPasswordModal from './RecoverPasswordModal';
+
 // Importamos la imagen local desde la carpeta assets
 import fachadaImg from '../assets/fachada_2.png';
 import logoTexto from '../assets/logo_texto.png';
@@ -13,6 +16,9 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  
+  // --- ESTADO RECUPERACIÓN ---
+  const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
 
   // --- NUEVOS ESTADOS PARA CAMBIO DE CLAVE OBLIGATORIO ---
   const [isRequiringPasswordChange, setIsRequiringPasswordChange] = useState(false);
@@ -211,7 +217,9 @@ export default function Login() {
                     <input type="checkbox" id="remember" className="h-4 w-4 text-blue-600 border-gray-300 rounded cursor-pointer focus:ring-blue-500" />
                     <label htmlFor="remember" className="ml-2 block text-sm font-medium text-gray-600 cursor-pointer select-none">Recordarme</label>
                   </div>
-                  <a href="#" className="text-sm text-blue-600 hover:text-blue-700 hover:underline font-semibold">¿Olvidaste tu clave?</a>
+                  <button type="button" onClick={() => setIsRecoveryModalOpen(true)} className="text-sm text-blue-600 hover:text-blue-700 hover:underline font-semibold bg-transparent border-none p-0 cursor-pointer">
+                    ¿Olvidaste tu clave?
+                  </button>
                 </div>
 
                 {error && <div className="p-3.5 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm font-medium text-center">{error}</div>}
@@ -280,6 +288,12 @@ export default function Login() {
 
         </div>
       </div>
+      
+      {/* MODAL DE RECUPERACIÓN DE CLAVE */}
+      <RecoverPasswordModal 
+        isOpen={isRecoveryModalOpen} 
+        onClose={() => setIsRecoveryModalOpen(false)} 
+      />
     </div>
   );
 }
