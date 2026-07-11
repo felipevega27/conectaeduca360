@@ -136,9 +136,13 @@ export default function Login() {
 
   // --- FLUJO 3: ENRUTAMIENTO FINAL ---
   const iniciarSesionFinal = (usuario) => {
+    // 1. Eliminar la clave por seguridad antes de guardar en localStorage
+    const { clave, ...usuarioSeguro } = usuario;
+
     const userToSave = {
-      ...usuario,
-      role: usuario.rol || usuario.role || 'alumno'
+      ...usuarioSeguro,
+      role: usuarioSeguro.rol || usuarioSeguro.role || 'alumno',
+      loginTimestamp: new Date().getTime() // 2. Guardar el timestamp para expiración (8 horas)
     };
     localStorage.setItem('userLogged', JSON.stringify(userToSave));
 

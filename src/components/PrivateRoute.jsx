@@ -11,6 +11,13 @@ export default function PrivateRoute({ allowedRoles }) {
 
   const user = JSON.parse(userJSON);
 
+  // Verificamos si la sesión expiró (8 horas = 8 * 60 * 60 * 1000 milisegundos)
+  const OCHO_HORAS = 8 * 60 * 60 * 1000;
+  if (user.loginTimestamp && (new Date().getTime() - user.loginTimestamp > OCHO_HORAS)) {
+    localStorage.removeItem('userLogged');
+    return <Navigate to="/" replace />;
+  }
+
   // 2. Verificamos si el rol del usuario está permitido en esta ruta
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     
