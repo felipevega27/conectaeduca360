@@ -91,5 +91,41 @@ export default function useNotificaciones(userRut) {
     }
   };
 
-  return { notificaciones, unreadCount, marcarComoLeida };
+  // 4. Función para eliminar una notificación específica
+  const eliminarNotificacion = async (id) => {
+    // Actualización optimista
+    setNotificaciones(prev => {
+      const notif = prev.find(n => n.id === id);
+      if (notif && !notif.leida) {
+        setUnreadCount(count => Math.max(0, count - 1));
+      }
+      return prev.filter(n => n.id !== id);
+    });
+
+    const { error } = await supabase
+      .from('notificaciones')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error eliminando notificación:', error);
+    }
+  };
+
+  // 5. Función para limpiar todas las notificaciones
+  const limpiarNotificaciones = async () => {
+    setNotificaciones([]);
+    setUnreadCount(0);
+
+    const { error } = await supabase
+      .from('notificaciones')
+      .delete()
+      .eq('usuario_rut', userRut);
+
+    if (error) {
+      console.error('Error limpiando notificaciones:', error);
+    }
+  };
+
+  return { notificaciones, unreadCount, marcarComoLeida, eliminarNotificacion, limpiarNotificaciones };
 }

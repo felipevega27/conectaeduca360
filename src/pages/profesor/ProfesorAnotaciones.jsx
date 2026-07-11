@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import ExcelJS from 'exceljs';
@@ -23,13 +23,23 @@ export default function ProfesorAnotaciones() {
   const [historial, setHistorial] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Estados para paginacion (Scroll Infinito) y Skeletons de Anotaciones
+  const [anotacionesPage, setAnotacionesPage] = useState(0);
+  const [hasMoreAnotaciones, setHasMoreAnotaciones] = useState(true);
+  const [isLoadingMoreAnotaciones, setIsLoadingMoreAnotaciones] = useState(false);
+  const [isLoadingInitialAnotaciones, setIsLoadingInitialAnotaciones] = useState(true);
+  const observer = useRef();
+  const PAGE_SIZE = 10;
+
   useEffect(() => {
     const loggedUserJSON = localStorage.getItem('userLogged');
     if (loggedUserJSON) {
       const parsedUser = JSON.parse(loggedUserJSON);
       setUser(parsedUser);
       cargarAlumnosProfesor(parsedUser.rut);
-      cargarHistorialReciente(parsedUser.rut);
+      setAnotacionesPage(0);
+      setHasMoreAnotaciones(true);
+      cargarHistorialReciente(parsedUser.rut, 0, true);
     }
   }, []);
 
@@ -53,7 +63,7 @@ export default function ProfesorAnotaciones() {
 
       if (matriculas && matriculas.length > 0) {
         const ruts = matriculas.map(m => m.rut_alumno);
-        const { data: perfiles } = await supabase.from('perfiles').select('rut, nombre').in('rut', ruts);
+        const { data: perfiles } = await supabase.from('perfiles').select('rut, nombre, avatar_url').in('rut', ruts);
 
         const alumnosFormateados = matriculas.map(m => {
           const perfil = perfiles?.find(p => p.rut === m.rut_alumno);
@@ -62,6 +72,7 @@ export default function ProfesorAnotaciones() {
             id: m.rut_alumno,
             rut: m.rut_alumno,
             nombre: perfil?.nombre || 'Sin Nombre',
+            avatar_url: perfil?.avatar_url || null,
             curso: cursoName
           };
         });
@@ -78,14 +89,20 @@ export default function ProfesorAnotaciones() {
     }
   };
 
-  const cargarHistorialReciente = async (rutProfesor) => {
+  const cargarHistorialReciente = async (rutProfesor, page = 0, isInitial = false) => {
+    if (isInitial) setIsLoadingInitialAnotaciones(true);
+    else setIsLoadingMoreAnotaciones(true);
+
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
     try {
       const { data } = await supabase
         .from('anotaciones')
         .select('id, tipo, gravedad, descripcion, fecha, rut_alumno')
         .eq('rut_profesor', rutProfesor)
         .order('fecha', { ascending: false })
-        .limit(10);
+        .range(from, to);
       
       if (data && data.length > 0) {
         const rutsAnotaciones = data.map(a => a.rut_alumno);
@@ -98,14 +115,45 @@ export default function ProfesorAnotaciones() {
             perfiles: { nombre: perfil?.nombre || 'Sin Nombre' }
           };
         });
-        setHistorial(historialMapeado);
+
+        if (isInitial) {
+          setHistorial(historialMapeado);
+        } else {
+          setHistorial(prev => {
+            const newIds = new Set(historialMapeado.map(h => h.id));
+            const filtered = prev.filter(h => !newIds.has(h.id));
+            return [...filtered, ...historialMapeado];
+          });
+        }
+        setHasMoreAnotaciones(data.length === PAGE_SIZE);
       } else {
-        setHistorial([]);
+        if (isInitial) setHistorial([]);
+        setHasMoreAnotaciones(false);
       }
     } catch (error) {
       console.error('Error cargando historial:', error);
+    } finally {
+      setIsLoadingInitialAnotaciones(false);
+      setIsLoadingMoreAnotaciones(false);
     }
   };
+
+  const lastAnotacionElementRef = useCallback(node => {
+    if (isLoadingInitialAnotaciones || isLoadingMoreAnotaciones) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMoreAnotaciones) {
+        setAnotacionesPage(prev => prev + 1);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [isLoadingInitialAnotaciones, isLoadingMoreAnotaciones, hasMoreAnotaciones]);
+
+  useEffect(() => {
+    if (anotacionesPage > 0 && user?.rut) {
+      cargarHistorialReciente(user.rut, anotacionesPage, false);
+    }
+  }, [anotacionesPage, user]);
 
   const alumnosFiltrados = searchTerm 
     ? alumnosDisponibles.filter(a => a.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || a.curso.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -327,9 +375,18 @@ export default function ProfesorAnotaciones() {
                               onClick={() => { setSelectedAlumno(a); setSearchTerm(''); }}
                               className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-50 dark:border-gray-700 last:border-0 flex items-center justify-between"
                             >
-                              <div>
-                                <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{a.nombre}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{a.curso}</p>
+                              <div className="flex items-center gap-3">
+                                {a.avatar_url ? (
+                                  <img src={a.avatar_url} alt={a.nombre} className="w-9 h-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shadow-sm" />
+                                ) : (
+                                  <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 flex items-center justify-center font-bold text-xs shadow-sm">
+                                    {a.nombre.substring(0,2).toUpperCase()}
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{a.nombre}</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">{a.curso}</p>
+                                </div>
                               </div>
                               <span className="text-blue-600 font-medium text-xs">Seleccionar</span>
                             </div>
@@ -343,9 +400,13 @@ export default function ProfesorAnotaciones() {
                 ) : (
                   <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-xl animate-fade-in">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-sm">
-                        {selectedAlumno.nombre.substring(0,2).toUpperCase()}
-                      </div>
+                      {selectedAlumno.avatar_url ? (
+                        <img src={selectedAlumno.avatar_url} alt={selectedAlumno.nombre} className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700 shadow-sm" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 flex items-center justify-center font-bold text-sm shadow-sm">
+                          {selectedAlumno.nombre.substring(0,2).toUpperCase()}
+                        </div>
+                      )}
                       <div>
                         <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{selectedAlumno.nombre}</p>
                         <p className="text-xs text-gray-600 dark:text-gray-400">{selectedAlumno.curso} • {selectedAlumno.rut}</p>
@@ -444,25 +505,60 @@ export default function ProfesorAnotaciones() {
             <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-4">Tus Anotaciones Recientes</h3>
             
             <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-              {historial.length === 0 && (
+              {isLoadingInitialAnotaciones ? (
+                <>
+                  <SkeletonAnotacion />
+                  <SkeletonAnotacion />
+                  <SkeletonAnotacion />
+                </>
+              ) : historial.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-10">No has registrado anotaciones recientemente.</p>
+              ) : (
+                historial.map((item, index) => {
+                  const itemContent = (
+                    <div className="border-b border-gray-100 dark:border-gray-700 pb-4 last:border-0 last:pb-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{item.perfiles?.nombre}</p>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                          item.tipo === 'positiva' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 
+                          item.tipo === 'negativa' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
+                          'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
+                        }`}>
+                          {item.tipo} {item.gravedad && `- ${item.gravedad}`}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{formatDate(item.fecha)}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 italic">"{item.descripcion}"</p>
+                    </div>
+                  );
+                  
+                  if (historial.length === index + 1) {
+                    return (
+                      <div ref={lastAnotacionElementRef} key={item.id}>
+                        {itemContent}
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div key={item.id}>
+                        {itemContent}
+                      </div>
+                    );
+                  }
+                })
               )}
-              {historial.map(item => (
-                <div key={item.id} className="border-b border-gray-100 dark:border-gray-700 pb-4 last:border-0 last:pb-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{item.perfiles?.nombre}</p>
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                      item.tipo === 'positiva' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 
-                      item.tipo === 'negativa' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
-                      'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
-                    }`}>
-                      {item.tipo} {item.gravedad && `- ${item.gravedad}`}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{formatDate(item.fecha)}</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 italic">"{item.descripcion}"</p>
+              
+              {isLoadingMoreAnotaciones && (
+                <div className="py-4 flex justify-center">
+                  <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
-              ))}
+              )}
+              
+              {!hasMoreAnotaciones && historial.length > 0 && (
+                <div className="text-center py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  No hay más anotaciones
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -471,3 +567,16 @@ export default function ProfesorAnotaciones() {
     </div>
   );
 }
+
+// Componente visual para los esqueletos de carga de Anotaciones
+const SkeletonAnotacion = () => (
+  <div className="border-b border-gray-100 dark:border-gray-700 pb-4 last:border-0 last:pb-0 animate-pulse">
+    <div className="flex items-center justify-between mb-2">
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-full w-16"></div>
+    </div>
+    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-2"></div>
+    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-full mb-1"></div>
+    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+  </div>
+);

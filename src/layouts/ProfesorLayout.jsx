@@ -187,6 +187,19 @@ export default function ProfesorLayout() {
                 </button>
               )}
 
+              {/* Pasar Asistencia (Prioridad Top Level) */}
+              <button
+                onClick={() => { navigate('/panel/profesor/asistencia'); setIsMobileMenuOpen(false); }}
+                title={isCollapsed ? "Pasar Asistencia" : ""}
+                className={`w-full flex items-center py-2.5 text-sm font-medium rounded-lg transition-colors ${isCollapsed ? 'justify-center px-0' : 'px-4'} ${isItemActive('/panel/profesor/asistencia')
+                  ? 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/20'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+              >
+                <svg className={`h-5 w-5 shrink-0 ${isCollapsed ? '' : 'mr-3'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                {!isCollapsed && <span>Pasar Asistencia</span>}
+              </button>
+
               {/* Libro de Clases (Desplegable) */}
               <div className="relative pt-2">
                 <button
@@ -210,13 +223,6 @@ export default function ProfesorLayout() {
 
                 <div className={`overflow-hidden transition-all duration-300 ${openSubmenus.libro ? 'max-h-40 mt-1' : 'max-h-0'}`}>
                   <div className={`space-y-1 ${isCollapsed ? 'px-0' : 'pl-11 pr-2'}`}>
-                    <button
-                      onClick={() => { navigate('/panel/profesor/asistencia'); setIsMobileMenuOpen(false); }}
-                      title={isCollapsed ? "Pasar Lista" : ""}
-                      className={`w-full flex items-center py-2 text-sm rounded-lg transition-colors ${isCollapsed ? 'justify-center px-0' : 'px-3 text-left'} ${isItemActive('/panel/profesor/asistencia') ? 'text-blue-600 font-medium bg-blue-50/50 dark:text-blue-400 dark:bg-blue-900/20' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                    >
-                      {isCollapsed ? <span className="font-bold text-xs uppercase">AS</span> : <span>Pasar Asistencia</span>}
-                    </button>
                     <button
                       onClick={() => { navigate('/panel/profesor/calificaciones'); setIsMobileMenuOpen(false); }}
                       title={isCollapsed ? "Calificaciones" : ""}

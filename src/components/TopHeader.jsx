@@ -96,7 +96,7 @@ export default function TopHeader({
 
   // Usar el hook de notificaciones con el RUT del usuario actual
   const userRut = user?.rut || user?.id;
-  const { notificaciones, unreadCount, marcarComoLeida } = useNotificaciones(userRut);
+  const { notificaciones, unreadCount, marcarComoLeida, eliminarNotificacion, limpiarNotificaciones } = useNotificaciones(userRut);
 
   const formatTimeAgo = (dateString) => {
     if (!dateString) return '';
@@ -393,18 +393,30 @@ export default function TopHeader({
                         if (!notif.leida) marcarComoLeida(notif.id);
                         if (notif.link_destino) navigate(notif.link_destino);
                       }}
-                      className={`px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer border-b border-gray-50 dark:border-gray-700/30 transition-colors flex gap-3 ${!notif.leida ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
+                      className={`px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer border-b border-gray-50 dark:border-gray-700/30 transition-colors flex gap-3 relative group ${!notif.leida ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
                     >
                       <div className="shrink-0 mt-0.5 text-xl">
                         {getNotifIcon(notif.tipo)}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 pr-8">
                         <p className={`text-sm ${!notif.leida ? 'font-bold' : 'font-semibold'} text-gray-800 dark:text-gray-100 truncate`}>{notif.titulo}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2 leading-relaxed">{notif.descripcion}</p>
                         <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 font-medium">{formatTimeAgo(notif.fecha_creacion)}</p>
                       </div>
+                      
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          eliminarNotificacion(notif.id);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200"
+                        title="Eliminar"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+
                       {!notif.leida && (
-                        <div className="shrink-0 flex items-center justify-center">
+                        <div className="shrink-0 flex items-center justify-center mt-1 group-hover:hidden">
                           <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                         </div>
                       )}
@@ -412,15 +424,25 @@ export default function TopHeader({
                   ))
                 )}
               </div>
-              <div className="p-2 border-t border-gray-100 dark:border-gray-700 text-center">
+              <div className="p-2 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    limpiarNotificaciones();
+                  }}
+                  className="text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-2 flex items-center gap-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  title="Limpiar todas"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
                 <button 
                   onClick={() => {
                     setIsNotificationsOpen(false);
                     navigate(`/panel/${(user?.role || user?.rol || 'alumno').toLowerCase()}/notificaciones`);
                   }}
-                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors w-full p-2"
+                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors flex-1 p-2 text-right rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 >
-                  Ver todas las notificaciones
+                  Ver todas
                 </button>
               </div>
             </div>

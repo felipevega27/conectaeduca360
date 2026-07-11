@@ -38,11 +38,11 @@ export default function AlumnoDashboard() {
     if (loggedUserJSON) {
       const parsedUser = JSON.parse(loggedUserJSON);
       setUser(parsedUser);
-      cargarDatos(parsedUser.rut);
+      cargarDatos(parsedUser.rut, parsedUser);
     }
   }, []);
 
-  const cargarDatos = async (rutAlumno) => {
+  const cargarDatos = async (rutAlumno, currentUser) => {
     setIsLoading(true);
     try {
       // 1. Obtener Matrícula y Curso
@@ -161,7 +161,7 @@ export default function AlumnoDashboard() {
       // 6. Datos para el certificado
       setAlumnoInfo({
         rut: rutAlumno,
-        nombre: parsedUser.name || parsedUser.nombre,
+        nombre: currentUser?.name || currentUser?.nombre || 'Alumno',
         curso: cursoNombre
       });
       const { data: config } = await supabase.from('configuracion_colegio').select('*').limit(1).maybeSingle();

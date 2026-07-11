@@ -169,8 +169,11 @@ export default function ProfesorHorario() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 h-full">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando horario...</p>
+        </div>
       </div>
     );
   }

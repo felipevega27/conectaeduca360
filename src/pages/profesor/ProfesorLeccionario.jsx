@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -17,6 +17,24 @@ export default function ProfesorLeccionario() {
   const [historialCompleto, setHistorialCompleto] = useState([]);
   const [isLoadingHistorial, setIsLoadingHistorial] = useState(false);
 
+  // Estados para el Modal de Edición
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editLeccionarioId, setEditLeccionarioId] = useState(null);
+  const [editLeccionarioText, setEditLeccionarioText] = useState('');
+  const [originalLeccionarioText, setOriginalLeccionarioText] = useState('');
+
+  // Estados para el Modal de Eliminación
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteLeccionarioId, setDeleteLeccionarioId] = useState(null);
+  const [deleteLeccionarioText, setDeleteLeccionarioText] = useState('');
+
+  // Estados para paginacion (Scroll Infinito) y Skeletons de Historial
+  const [historialPage, setHistorialPage] = useState(0);
+  const [hasMoreHistorial, setHasMoreHistorial] = useState(true);
+  const [isLoadingMoreHistorial, setIsLoadingMoreHistorial] = useState(false);
+  const observer = useRef();
+  const PAGE_SIZE = 10;
+
   const bloquesOptions = [
     'Bloque 1 (08:00 - 09:30)',
     'Bloque 2 (09:45 - 11:15)',
@@ -31,6 +49,9 @@ export default function ProfesorLeccionario() {
       setUser(parsedUser);
       cargarAsignaturas(parsedUser.rut);
       cargarUltimosRegistros(parsedUser.rut);
+      setHistorialPage(0);
+      setHasMoreHistorial(true);
+      cargarHistorialCompleto(parsedUser.rut, 0, true);
     }
   }, []);
 
@@ -92,8 +113,16 @@ export default function ProfesorLeccionario() {
     }
   };
 
-  const cargarHistorialCompleto = async (rut) => {
-    setIsLoadingHistorial(true);
+  const cargarHistorialCompleto = async (rut, page = 0, isInitial = false) => {
+    if (isInitial) {
+      setIsLoadingHistorial(true);
+    } else {
+      setIsLoadingMoreHistorial(true);
+    }
+
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
     try {
       const { data, error } = await supabase
         .from('leccionarios')
@@ -110,22 +139,140 @@ export default function ProfesorLeccionario() {
           )
         `)
         .eq('rut_profesor', rut)
-        .order('fecha', { ascending: false });
+        .order('fecha', { ascending: false })
+        .range(from, to);
 
       if (error) throw error;
-      setHistorialCompleto(data || []);
+      
+      if (data) {
+        if (isInitial) {
+          setHistorialCompleto(data);
+        } else {
+          setHistorialCompleto(prev => {
+            const newIds = new Set(data.map(d => d.id));
+            const filteredPrev = prev.filter(d => !newIds.has(d.id));
+            return [...filteredPrev, ...data];
+          });
+        }
+        setHasMoreHistorial(data.length === PAGE_SIZE);
+      }
     } catch (err) {
       console.error('Error cargando historial completo:', err);
       toast.error('No se pudo cargar el historial completo.');
     } finally {
       setIsLoadingHistorial(false);
+      setIsLoadingMoreHistorial(false);
     }
   };
 
+  const lastHistorialElementRef = useCallback(node => {
+    if (isLoadingHistorial || isLoadingMoreHistorial) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMoreHistorial) {
+        setHistorialPage(prev => prev + 1);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [isLoadingHistorial, isLoadingMoreHistorial, hasMoreHistorial]);
+
+  useEffect(() => {
+    if (historialPage > 0 && user?.rut) {
+      cargarHistorialCompleto(user.rut, historialPage, false);
+    }
+  }, [historialPage, user]);
+
   const abrirHistorial = () => {
     setIsModalHistorialOpen(true);
-    if (user) {
+  };
+
+  const handleEditLeccionario = (id, oldDesc) => {
+    setEditLeccionarioId(id);
+    setOriginalLeccionarioText(oldDesc);
+    setEditLeccionarioText(oldDesc);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditLeccionario = async () => {
+    const nuevaDesc = editLeccionarioText;
+    if (nuevaDesc.trim() === "") {
+      toast.error("El contenido no puede estar vacío");
+      return;
+    }
+    if (nuevaDesc === originalLeccionarioText) {
+      setIsEditModalOpen(false);
+      return;
+    }
+
+    setIsEditModalOpen(false); // Cerramos el modal
+    const toastId = toast.loading("Actualizando registro y guardando auditoría...");
+    try {
+      // 1. Guardar auditoría
+      const { error: errAudit } = await supabase.from('logs_auditoria').insert([{
+        tabla_afectada: 'leccionarios',
+        registro_id: editLeccionarioId,
+        accion: 'UPDATE',
+        rut_usuario: user.rut || user.id,
+        datos_anteriores: originalLeccionarioText
+      }]);
+      if (errAudit) {
+        console.error("Error audit update:", errAudit);
+        // Continuamos de todas formas o detenemos? Ideal detener si falla auditoría.
+      }
+
+      // 2. Actualizar registro
+      const { error: errUpdate } = await supabase
+        .from('leccionarios')
+        .update({ descripcion_actividad: nuevaDesc })
+        .eq('id', editLeccionarioId);
+
+      if (errUpdate) throw errUpdate;
+
+      toast.success("Leccionario modificado con éxito", { id: toastId });
       cargarHistorialCompleto(user.rut || user.id);
+      cargarUltimosRegistros(user.rut || user.id);
+    } catch (error) {
+      console.error("Error al editar:", error);
+      toast.error("Error al modificar el leccionario", { id: toastId });
+    }
+  };
+
+  const handleDeleteLeccionario = (id, oldDesc) => {
+    setDeleteLeccionarioId(id);
+    setDeleteLeccionarioText(oldDesc);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeleteModalOpen(false);
+    const toastId = toast.loading("Eliminando registro y guardando auditoría...");
+    try {
+      // 1. Guardar auditoría
+      const { error: errAudit } = await supabase.from('logs_auditoria').insert([{
+        tabla_afectada: 'leccionarios',
+        registro_id: deleteLeccionarioId,
+        accion: 'DELETE',
+        rut_usuario: user.rut || user.id,
+        datos_anteriores: deleteLeccionarioText
+      }]);
+      if (errAudit) {
+        console.error("Error audit delete:", errAudit);
+      }
+
+      // 2. Eliminar registro
+      const { error: errDelete } = await supabase
+        .from('leccionarios')
+        .delete()
+        .eq('id', deleteLeccionarioId);
+
+      if (errDelete) throw errDelete;
+
+      toast.success("Leccionario eliminado con éxito", { id: toastId });
+      cargarHistorialCompleto(user.rut || user.id);
+      cargarUltimosRegistros(user.rut || user.id);
+    } catch (error) {
+      console.error("Error al eliminar:", error);
+      toast.error("Error al eliminar el leccionario", { id: toastId });
     }
   };
 
@@ -198,6 +345,7 @@ export default function ProfesorLeccionario() {
       
       // Refrescar registros recientes
       cargarUltimosRegistros(user.rut || user.id);
+      cargarHistorialCompleto(user.rut || user.id);
       
     } catch (error) {
       console.error("Error guardando leccionario:", error);
@@ -391,7 +539,7 @@ export default function ProfesorLeccionario() {
 
       {/* MODAL HISTORIAL COMPLETO */}
       {isModalHistorialOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/80 animate-fade-in">
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-gray-700">
               <h3 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
@@ -408,12 +556,25 @@ export default function ProfesorLeccionario() {
             
             <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
               {isLoadingHistorial ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <svg className="animate-spin h-8 w-8 text-blue-600 mb-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <p className="text-gray-500 font-medium">Cargando historial...</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Fecha y Hora</th>
+                        <th className="px-4 py-3 font-semibold">Asignatura y Curso</th>
+                        <th className="px-4 py-3 font-semibold">Contenido Tratado</th>
+                        <th className="px-4 py-3 font-semibold text-center">Estado</th>
+                        <th className="px-4 py-3 font-semibold text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <SkeletonHistorial />
+                      <SkeletonHistorial />
+                      <SkeletonHistorial />
+                      <SkeletonHistorial />
+                      <SkeletonHistorial />
+                    </tbody>
+                  </table>
                 </div>
               ) : historialCompleto.length > 0 ? (
                 <div className="overflow-x-auto">
@@ -424,10 +585,11 @@ export default function ProfesorLeccionario() {
                         <th className="px-4 py-3 font-semibold">Asignatura y Curso</th>
                         <th className="px-4 py-3 font-semibold">Contenido Tratado</th>
                         <th className="px-4 py-3 font-semibold text-center">Estado</th>
+                        <th className="px-4 py-3 font-semibold text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                      {historialCompleto.map(reg => {
+                      {historialCompleto.map((reg, index) => {
                         const dateObj = new Date(reg.fecha + "T00:00:00");
                         const fechaStr = dateObj.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
                         
@@ -435,9 +597,9 @@ export default function ProfesorLeccionario() {
                         const asignaturaNombre = horario?.asignaturas?.nombre || 'Desconocido';
                         const cursoNombre = horario?.cursos?.nombre || 'Desconocido';
                         const horaFormat = horario?.hora_inicio ? horario.hora_inicio.substring(0, 5) : '';
-
-                        return (
-                          <tr key={reg.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
+                        
+                        const rowContent = (
+                          <>
                             <td className="px-4 py-4 whitespace-nowrap">
                               <p className="font-semibold text-gray-800 dark:text-gray-200">{fechaStr}</p>
                               {horaFormat && <p className="text-xs text-gray-500">{horaFormat}</p>}
@@ -460,11 +622,55 @@ export default function ProfesorLeccionario() {
                                 </span>
                               )}
                             </td>
-                          </tr>
+                            <td className="px-4 py-4 text-right whitespace-nowrap">
+                              <div className="flex justify-end gap-2">
+                                <button 
+                                  onClick={() => handleEditLeccionario(reg.id, reg.descripcion_actividad)}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                                  title="Editar Leccionario"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteLeccionario(reg.id, reg.descripcion_actividad)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                  title="Eliminar Leccionario"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                              </div>
+                            </td>
+                          </>
                         );
+
+                        if (historialCompleto.length === index + 1) {
+                          return (
+                            <tr ref={lastHistorialElementRef} key={reg.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
+                              {rowContent}
+                            </tr>
+                          );
+                        } else {
+                          return (
+                            <tr key={reg.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
+                              {rowContent}
+                            </tr>
+                          );
+                        }
                       })}
                     </tbody>
                   </table>
+                  
+                  {isLoadingMoreHistorial && (
+                    <div className="py-4 flex justify-center">
+                      <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  )}
+                  
+                  {!hasMoreHistorial && historialCompleto.length > 0 && (
+                     <div className="text-center py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                       No hay más registros
+                     </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12">
@@ -487,6 +693,114 @@ export default function ProfesorLeccionario() {
           </div>
         </div>
       )}
+
+      {/* MODAL DE EDICIÓN DE LECCIONARIO */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-900/80 animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                Modificar Leccionario
+              </h3>
+              <button 
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300 p-2 rounded-xl transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Contenido Tratado</label>
+              <textarea
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none h-32"
+                value={editLeccionarioText}
+                onChange={(e) => setEditLeccionarioText(e.target.value)}
+              ></textarea>
+              <p className="text-xs text-gray-500 mt-2">
+                Recuerda que este cambio quedará registrado en la bitácora de auditoría.
+              </p>
+            </div>
+            
+            <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-b-2xl flex justify-end gap-3">
+              <button 
+                onClick={() => setIsEditModalOpen(false)}
+                className="px-5 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors shadow-sm"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleSaveEditLeccionario}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+              >
+                Guardar Cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN DE ELIMINACIÓN */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-900/80 animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">
+                ¿Eliminar Leccionario?
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Estás a punto de eliminar este registro del leccionario. Esta acción quedará permanentemente registrada en la bitácora de auditoría por motivos legales.
+              </p>
+            </div>
+            
+            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 flex justify-center gap-3">
+              <button 
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-5 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors shadow-sm w-full"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleConfirmDelete}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-colors shadow-sm w-full"
+              >
+                Sí, Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+// Componente visual para los esqueletos de carga de Historial
+const SkeletonHistorial = () => (
+  <tr className="animate-pulse border-b border-gray-100 dark:border-gray-700">
+    <td className="px-4 py-4">
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24 mb-2"></div>
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+    </td>
+    <td className="px-4 py-4">
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-2"></div>
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+    </td>
+    <td className="px-4 py-4">
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-full mb-1"></div>
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-4/5"></div>
+    </td>
+    <td className="px-4 py-4 text-center">
+      <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded-full w-20 mx-auto"></div>
+    </td>
+    <td className="px-4 py-4 text-right">
+      <div className="flex justify-end gap-2">
+        <div className="w-7 h-7 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+        <div className="w-7 h-7 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+      </div>
+    </td>
+  </tr>
+);

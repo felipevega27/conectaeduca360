@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { sortCursos } from '../../utils/sortUtils';
+import { initSchoolPdf, addPdfFooter } from '../../utils/pdfUtils';
 
 export default function ProfesorDashboard() {
   const navigate = useNavigate();
@@ -32,6 +32,72 @@ export default function ProfesorDashboard() {
   const [nuevoAnuncio, setNuevoAnuncio] = useState({ titulo: '', contenido: '', id_curso: '' });
   const [isPublishing, setIsPublishing] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  // Estados para paginacion (Scroll Infinito) y Skeletons
+  const [anunciosPage, setAnunciosPage] = useState(0);
+  const [hasMoreAnuncios, setHasMoreAnuncios] = useState(true);
+  const [isLoadingAnunciosInitial, setIsLoadingAnunciosInitial] = useState(true);
+  const [isLoadingMoreAnuncios, setIsLoadingMoreAnuncios] = useState(false);
+  const observer = useRef();
+  const PAGE_SIZE = 5;
+
+  const fetchAnuncios = async (rut, page = 0, isInitial = false) => {
+    if (isInitial) {
+      setIsLoadingAnunciosInitial(true);
+    } else {
+      setIsLoadingMoreAnuncios(true);
+    }
+
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    try {
+      const { data: anunciosData, error } = await supabase
+        .from('anuncios_curso')
+        .select('*, cursos(nombre)')
+        .eq('rut_profesor', rut)
+        .order('fecha_creacion', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      if (anunciosData) {
+        if (isInitial) {
+          setAnuncios(anunciosData);
+        } else {
+          setAnuncios(prev => {
+            const newIds = new Set(anunciosData.map(a => a.id));
+            const filteredPrev = prev.filter(a => !newIds.has(a.id));
+            return [...filteredPrev, ...anunciosData];
+          });
+        }
+        setHasMoreAnuncios(anunciosData.length === PAGE_SIZE);
+      }
+    } catch (error) {
+      console.error("Error cargando avisos:", error);
+    } finally {
+      setIsLoadingAnunciosInitial(false);
+      setIsLoadingMoreAnuncios(false);
+    }
+  };
+
+  const lastAnuncioElementRef = useCallback(node => {
+    if (isLoadingAnunciosInitial || isLoadingMoreAnuncios) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMoreAnuncios) {
+        setAnunciosPage(prev => prev + 1);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [isLoadingAnunciosInitial, isLoadingMoreAnuncios, hasMoreAnuncios]);
+
+  useEffect(() => {
+    if (anunciosPage > 0 && user?.rut) {
+      fetchAnuncios(user.rut, anunciosPage, false);
+    }
+  }, [anunciosPage, user]);
 
   // Obtener el día de la semana actual en español
   const getDiaHoy = () => {
@@ -84,14 +150,15 @@ export default function ProfesorDashboard() {
 
         if (matriculas && matriculas.length > 0) {
           const ruts = matriculas.map(m => m.rut_alumno);
-          const { data: perfiles } = await supabase.from('perfiles').select('rut, nombre, email').in('rut', ruts);
+          const { data: perfiles } = await supabase.from('perfiles').select('rut, nombre, email, avatar_url').in('rut', ruts);
           
           const lista = matriculas.map(m => {
             const perfil = perfiles?.find(p => p.rut === m.rut_alumno);
             return {
               rut: m.rut_alumno,
               nombre: perfil?.nombre || 'Sin Nombre',
-              email: perfil?.email || 'Sin correo registrado'
+              email: perfil?.email || 'Sin correo registrado',
+              avatar_url: perfil?.avatar_url || null
             };
           });
           lista.sort((a,b) => a.nombre.localeCompare(b.nombre));
@@ -207,16 +274,10 @@ export default function ProfesorDashboard() {
         setMisCursos(sortCursos(cursosList));
       }
 
-      // 4. Cargar Anuncios del Profesor
-      const { data: anunciosData } = await supabase
-        .from('anuncios_curso')
-        .select('*, cursos(nombre)')
-        .eq('rut_profesor', rutProfesor)
-        .order('fecha_creacion', { ascending: false });
-      
-      if (anunciosData) {
-        setAnuncios(anunciosData);
-      }
+      // 4. Cargar Anuncios del Profesor (Primera Página)
+      setAnunciosPage(0);
+      setHasMoreAnuncios(true);
+      await fetchAnuncios(rutProfesor, 0, true);
 
     } catch (error) {
       console.error('Error cargando dashboard del profesor:', error);
@@ -228,30 +289,45 @@ export default function ProfesorDashboard() {
   const generarReporteAsistenciaPDF = async () => {
     if (!profesorJefe.idCurso) return;
     
+    setIsGeneratingPDF(true);
     const toastId = toast.loading('Generando reporte de asistencia...');
     try {
-      // 1. Traer todos los alumnos (perfiles + matriculas)
-      const { data: matriculas } = await supabase
+      // 1. Traer todos los alumnos matriculados
+      const { data: matriculas, error: errMat } = await supabase
         .from('matriculas')
-        .select('rut_alumno, perfiles(nombre)')
+        .select('rut_alumno')
         .eq('id_curso', profesorJefe.idCurso);
         
+      if (errMat) throw errMat;
+
       if (!matriculas || matriculas.length === 0) {
         toast.error('No hay alumnos matriculados.', { id: toastId });
+        setIsGeneratingPDF(false);
         return;
       }
       
+      const ruts = matriculas.map(m => m.rut_alumno);
+      const { data: perfiles, error: errPerf } = await supabase
+        .from('perfiles')
+        .select('rut, nombre')
+        .in('rut', ruts);
+
+      if (errPerf) throw errPerf;
+
       // 2. Traer TODA la asistencia de este curso
-      const { data: asistencias } = await supabase
+      const { data: asistencias, error: errAsis } = await supabase
         .from('asistencia_alumnos')
         .select('rut_alumno, estado')
         .eq('id_curso', profesorJefe.idCurso);
         
+      if (errAsis) throw errAsis;
+        
       // 3. Procesar datos (contar Presente, Ausente, Atrasado por alumno)
       const resumenAsistencia = {};
       matriculas.forEach(m => {
+        const perfil = perfiles?.find(p => p.rut === m.rut_alumno);
         resumenAsistencia[m.rut_alumno] = {
-          nombre: m.perfiles?.nombre || 'Desconocido',
+          nombre: perfil?.nombre || 'Desconocido',
           presente: 0,
           ausente: 0,
           atrasado: 0
@@ -278,24 +354,31 @@ export default function ProfesorDashboard() {
       ]);
 
       // 4. Generar el PDF
-      const doc = new jsPDF();
+      const doc = await initSchoolPdf('COLEGIO CONECTAEDUC', 'Reporte de Asistencia');
+      
+      let currentY = doc.startY + 10;
       
       // Títulos
       doc.setFontSize(16);
-      doc.text(`Reporte de Asistencia: ${profesorJefe.curso}`, 14, 20);
+      doc.setTextColor(30, 64, 175);
+      doc.text(`Reporte de Asistencia: ${profesorJefe.curso}`, 14, currentY);
       
+      currentY += 8;
       doc.setFontSize(10);
       doc.setTextColor(100);
-      doc.text(`Generado el: ${new Date().toLocaleDateString('es-CL')} por ${user?.nombre || 'Profesor'}`, 14, 28);
+      doc.text(`Generado el: ${new Date().toLocaleDateString('es-CL')} por ${user?.nombre || 'Profesor'}`, 14, currentY);
       
+      currentY += 10;
       // AVISO INTERNO
       doc.setFontSize(9);
       doc.setTextColor(220, 38, 38); // Rojo
-      doc.text("DOCUMENTO DE USO INTERNO E INFORMATIVO PARA REUNIONES DE APODERADOS.", 14, 38);
-      doc.text("ESTE DOCUMENTO NO CONSTITUYE UN CERTIFICADO OFICIAL DE INASISTENCIA.", 14, 43);
+      doc.text("DOCUMENTO DE USO INTERNO E INFORMATIVO PARA REUNIONES DE APODERADOS.", 14, currentY);
+      currentY += 5;
+      doc.text("ESTE DOCUMENTO NO CONSTITUYE UN CERTIFICADO OFICIAL DE INASISTENCIA.", 14, currentY);
 
-      doc.autoTable({
-        startY: 50,
+      currentY += 8;
+      autoTable(doc, {
+        startY: currentY,
         head: [['Estudiante', 'Presentes', 'Ausentes', 'Atrasados', 'Total Clases Registradas']],
         body: bodyData,
         theme: 'striped',
@@ -303,12 +386,16 @@ export default function ProfesorDashboard() {
         styles: { fontSize: 9 }
       });
       
+      addPdfFooter(doc);
+      
       doc.save(`Reporte_Asistencia_${profesorJefe.curso.replace(/ /g, '_')}.pdf`);
       toast.success('Reporte generado exitosamente.', { id: toastId });
       
     } catch (error) {
       console.error(error);
       toast.error('Error al generar reporte.', { id: toastId });
+    } finally {
+      setIsGeneratingPDF(false);
     }
   };
 
@@ -720,17 +807,24 @@ export default function ProfesorDashboard() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-gray-50/30 dark:bg-gray-900/20">
-            {anuncios.length === 0 ? (
+            {isLoadingAnunciosInitial ? (
+              <>
+                <SkeletonAnuncio />
+                <SkeletonAnuncio />
+                <SkeletonAnuncio />
+              </>
+            ) : anuncios.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 dark:text-gray-500 gap-3">
                 <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
                 <p className="text-sm font-medium max-w-sm">Aún no has publicado ningún aviso.<br/>Usa el formulario para enviar mensajes a tus cursos.</p>
               </div>
             ) : (
-              anuncios.map(anuncio => {
+              anuncios.map((anuncio, index) => {
                 const date = new Date(anuncio.fecha_creacion);
                 const fechaFormateada = date.toLocaleString('es-CL', { day: '2-digit', month: 'long', hour: '2-digit', minute:'2-digit' });
-                return (
-                  <div key={anuncio.id} className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow group">
+                
+                const cardContent = (
+                  <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow group">
                     <button 
                       onClick={() => handleEliminarAnuncio(anuncio.id)}
                       className="absolute top-4 right-4 text-gray-400 hover:text-red-500 bg-gray-50 dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900/30 w-8 h-8 rounded-full flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100"
@@ -754,7 +848,33 @@ export default function ProfesorDashboard() {
                     </div>
                   </div>
                 );
+
+                if (anuncios.length === index + 1) {
+                  return (
+                    <div ref={lastAnuncioElementRef} key={anuncio.id}>
+                      {cardContent}
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div key={anuncio.id}>
+                      {cardContent}
+                    </div>
+                  );
+                }
               })
+            )}
+
+            {isLoadingMoreAnuncios && (
+              <div className="py-4 flex justify-center">
+                <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+            
+            {!hasMoreAnuncios && anuncios.length > 0 && (
+               <div className="text-center py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                 No hay más avisos
+               </div>
             )}
           </div>
         </div>
@@ -783,9 +903,13 @@ export default function ProfesorDashboard() {
               <div className="divide-y divide-gray-100 dark:divide-gray-700">
                 {alumnosJefatura.map(alumno => (
                   <div key={alumno.rut} className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full flex items-center justify-center font-bold text-lg shrink-0">
-                      {alumno.nombre.substring(0, 2).toUpperCase()}
-                    </div>
+                    {alumno.avatar_url ? (
+                      <img src={alumno.avatar_url} alt={alumno.nombre} className="w-12 h-12 rounded-full object-cover shadow-sm shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full flex items-center justify-center font-bold text-lg shrink-0 shadow-sm">
+                        {alumno.nombre.substring(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-gray-800 dark:text-white truncate">{alumno.nombre}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{alumno.rut}</p>
@@ -801,10 +925,15 @@ export default function ProfesorDashboard() {
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex justify-between items-center">
               <button 
                 onClick={generarReporteAsistenciaPDF}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg shadow-sm transition-colors"
+                disabled={isGeneratingPDF}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm rounded-lg shadow-sm transition-colors"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                Exportar Reporte (PDF)
+                {isGeneratingPDF ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                )}
+                {isGeneratingPDF ? 'Generando...' : 'Exportar Reporte (PDF)'}
               </button>
               <button 
                 onClick={() => setIsModalJefaturaOpen(false)}
@@ -820,3 +949,21 @@ export default function ProfesorDashboard() {
     </div>
   );
 }
+
+// Componente visual para los esqueletos de carga de Anuncios
+const SkeletonAnuncio = () => (
+  <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 animate-pulse">
+    <div className="flex items-center gap-3 mb-3">
+      <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 shrink-0"></div>
+      <div className="flex-1 space-y-2">
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+      </div>
+    </div>
+    <div className="pt-2 space-y-2">
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
+      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-4/5"></div>
+    </div>
+  </div>
+);

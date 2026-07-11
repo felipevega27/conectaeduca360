@@ -87,14 +87,16 @@ export default function ProfesorJefatura() {
           const prom = notasAlumno.length > 0 ? (suma / notasAlumno.length).toFixed(1) : (0).toFixed(1);
 
           // 3. Anotaciones
-          const anotAlumno = anotaciones?.filter(a => a.rut_alumno === al.rut && a.tipo?.toLowerCase() === 'negativa') || [];
-          const anot = anotAlumno.length;
+          const anotAlumno = anotaciones?.filter(a => a.rut_alumno === al.rut) || [];
+          const anotNegativas = anotAlumno.filter(a => a.tipo?.toLowerCase() === 'negativa').length;
+          const anotTotales = anotAlumno.length;
 
           return {
             ...al,
             promedioGeneral: parseFloat(prom),
             asistenciaGeneral: asis,
-            anotacionesNegativas: anot
+            anotacionesNegativas: anotNegativas,
+            anotacionesTotales: anotTotales
           };
         });
 
@@ -122,8 +124,11 @@ export default function ProfesorJefatura() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 h-full min-h-[500px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando información del curso...</p>
+        </div>
       </div>
     );
   }
@@ -253,9 +258,16 @@ export default function ProfesorJefatura() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className={`font-medium ${alumno.anotacionesNegativas > 3 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                      {alumno.anotacionesNegativas}
-                    </span>
+                    <div className="flex flex-col items-center">
+                      <span className={`font-medium ${alumno.anotacionesNegativas > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'}`}>
+                        {alumno.anotacionesTotales} {alumno.anotacionesTotales === 1 ? 'Total' : 'Totales'}
+                      </span>
+                      {alumno.anotacionesNegativas > 0 && (
+                        <span className="text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-0.5 rounded mt-1">
+                          {alumno.anotacionesNegativas} Neg.
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-center">
                     {alumno.promedioGeneral >= 4.0 && alumno.asistenciaGeneral >= 85 ? (
