@@ -5,29 +5,28 @@ import toast, { Toaster } from 'react-hot-toast';
 import autoTable from 'jspdf-autotable';
 import { sortCursos } from '../../utils/sortUtils';
 import { initSchoolPdf, addPdfFooter } from '../../utils/pdfUtils';
+import { useAuth } from '../../context/AuthContext';
+import { useProfesorDashboardQuery } from '../../hooks/queries/useProfesorDashboardQuery';
+import { SkeletonBase, SkeletonCard, SkeletonRow } from '../../components/SkeletonLoader';
 
 export default function ProfesorDashboard() {
+  const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [user, setUser] = useState(null);
-  const [profesorJefe, setProfesorJefe] = useState({
-    idCurso: null,
-    curso: 'Sin Jefatura',
-    alumnosRiesgo: 0,
-    avancePlanificacion: 0
-  });
+  const { data: dashboardData, isLoading, isError } = useProfesorDashboardQuery(user?.rut);
 
-  const [clasesHoy, setClasesHoy] = useState([]);
-  const [feriadoHoy, setFeriadoHoy] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const profesorJefe = dashboardData?.profesorJefe || { idCurso: null, curso: 'Sin Jefatura', alumnosRiesgo: 0, avancePlanificacion: 0, alumnos: [], alumnosRiesgoDetalle: [] };
+  const clasesHoy = dashboardData?.clasesHoy || [];
+  const feriadoHoy = dashboardData?.feriadoHoy || null;
+  const misCursos = dashboardData?.misCursos || [];
+  
+  const alumnosJefatura = profesorJefe.alumnos;
+  const alumnosEnRiesgo = profesorJefe.alumnosRiesgoDetalle;
 
   // Estados para el Modal de Jefatura
   const [isModalJefaturaOpen, setIsModalJefaturaOpen] = useState(false);
-  const [alumnosJefatura, setAlumnosJefatura] = useState([]);
-  const [alumnosEnRiesgo, setAlumnosEnRiesgo] = useState([]);
 
   // Estados para Muro de Anuncios (Blog)
-  const [misCursos, setMisCursos] = useState([]);
   const [anuncios, setAnuncios] = useState([]);
   const [nuevoAnuncio, setNuevoAnuncio] = useState({ titulo: '', contenido: '', id_curso: '' });
   const [isPublishing, setIsPublishing] = useState(false);
@@ -98,193 +97,6 @@ export default function ProfesorDashboard() {
       fetchAnuncios(user.rut, anunciosPage, false);
     }
   }, [anunciosPage, user]);
-
-  // Obtener el día de la semana actual en español
-  const getDiaHoy = () => {
-    const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    return dias[new Date().getDay()];
-  };
-
-  useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarDatosDashboard(parsedUser.rut);
-    }
-  }, []);
-
-  const cargarDatosDashboard = async (rutProfesor) => {
-    setIsLoading(true);
-    try {
-      // 1. Obtener Jefatura (si es profesor jefe de algún curso)
-      const { data: cursoJefatura } = await supabase
-        .from('cursos')
-        .select('id, nombre')
-        .eq('rut_profesor_jefe', rutProfesor)
-        .maybeSingle();
-
-      if (cursoJefatura) {
-        // Contar alumnos en riesgo (con más de 1 inasistencia) o bajo promedio
-        const { data: asistencias } = await supabase.from('asistencia_alumnos').select('rut_alumno, estado').eq('id_curso', cursoJefatura.id).eq('estado', 'Ausente');
-        
-        const ausenciasCount = {};
-        asistencias?.forEach(a => {
-            ausenciasCount[a.rut_alumno] = (ausenciasCount[a.rut_alumno] || 0) + 1;
-        });
-        
-        const rutsRiesgo = Object.keys(ausenciasCount).filter(rut => ausenciasCount[rut] >= 2);
-        
-        setProfesorJefe({
-          idCurso: cursoJefatura.id,
-          curso: cursoJefatura.nombre,
-          alumnosRiesgo: rutsRiesgo.length,
-          avancePlanificacion: 0
-        });
-
-        // Cargar alumnos de jefatura
-        const { data: matriculas } = await supabase
-          .from('matriculas')
-          .select('rut_alumno')
-          .eq('id_curso', cursoJefatura.id);
-
-        if (matriculas && matriculas.length > 0) {
-          const ruts = matriculas.map(m => m.rut_alumno);
-          const { data: perfiles } = await supabase.from('perfiles').select('rut, nombre, email, avatar_url').in('rut', ruts);
-          
-          const lista = matriculas.map(m => {
-            const perfil = perfiles?.find(p => p.rut === m.rut_alumno);
-            return {
-              rut: m.rut_alumno,
-              nombre: perfil?.nombre || 'Sin Nombre',
-              email: perfil?.email || 'Sin correo registrado',
-              avatar_url: perfil?.avatar_url || null
-            };
-          });
-          lista.sort((a,b) => a.nombre.localeCompare(b.nombre));
-          setAlumnosJefatura(lista);
-          
-          // Llenar lista de riesgo
-          const riesgoLista = lista.filter(a => rutsRiesgo.includes(a.rut)).map(a => ({
-              ...a,
-              motivo: `${ausenciasCount[a.rut]} ausencias consecutivas`
-          }));
-          setAlumnosEnRiesgo(riesgoLista);
-        }
-      }
-
-      // Obtener porcentaje de avance de planificaciones del profesor
-      const { data: planes } = await supabase
-        .from('planificaciones')
-        .select('id')
-        .eq('rut_profesor', rutProfesor);
-      
-      // Simulamos que el objetivo anual por profesor son 10 planificaciones.
-      const planesCount = planes ? planes.length : 0;
-      const avanceCalculado = Math.min(Math.round((planesCount / 10) * 100), 100);
-      
-      setProfesorJefe(prev => ({ ...prev, avancePlanificacion: avanceCalculado }));
-
-      // 2. Obtener Clases de Hoy desde 'horarios' o verificar Feriado
-      const diaHoy = getDiaHoy();
-      const hoy = new Date();
-      const yyyy = hoy.getFullYear();
-      const mm = String(hoy.getMonth() + 1).padStart(2, '0');
-      const dd = String(hoy.getDate()).padStart(2, '0');
-      const hoyIso = `${yyyy}-${mm}-${dd}`;
-
-      const { data: feriadosList } = await supabase
-        .from('feriados')
-        .select('*');
-
-      const feriado = feriadosList?.find(f => f.fecha && f.fecha.startsWith(hoyIso));
-
-      if (feriado) {
-        setFeriadoHoy(feriado);
-        setClasesHoy([]);
-      } else {
-        setFeriadoHoy(null);
-        
-        const { data: horariosHoy } = await supabase
-          .from('horarios')
-          .select('*, cursos(nombre), asignaturas(nombre)')
-          .eq('rut_profesor', rutProfesor)
-          .eq('dia_semana', diaHoy)
-          .order('hora_inicio', { ascending: true });
-
-        if (horariosHoy && horariosHoy.length > 0) {
-          // Obtener los leccionarios de hoy para ver cuáles están firmados
-          const horariosIds = horariosHoy.map(h => h.id);
-          const { data: leccionarios } = await supabase
-            .from('leccionarios')
-            .select('id_horario, firmado')
-            .in('id_horario', horariosIds)
-            .eq('fecha', hoyIso);
-
-          const leccionariosMap = {};
-          leccionarios?.forEach(lec => {
-            leccionariosMap[lec.id_horario] = lec.firmado;
-          });
-
-          // Formatear las clases para el estado
-          const horaActualStr = hoy.getHours().toString().padStart(2, '0') + ':' + hoy.getMinutes().toString().padStart(2, '0');
-
-          const clasesFormateadas = horariosHoy.map(h => {
-            let estado = 'Pendiente';
-            if (horaActualStr >= h.hora_inicio && horaActualStr <= h.hora_fin) {
-              estado = 'En Curso';
-            } else if (horaActualStr > h.hora_fin || leccionariosMap[h.id]) {
-              estado = 'Finalizada';
-            }
-
-            return {
-              id: h.id, // ID del horario
-              id_curso: h.id_curso,
-              id_asignatura: h.id_asignatura,
-              bloque: h.bloque,
-              hora: `${h.hora_inicio.substring(0, 5)} - ${h.hora_fin.substring(0, 5)}`,
-              curso: h.cursos?.nombre || 'Curso Desconocido',
-              asignatura: h.asignaturas?.nombre || 'Asignatura Desconocida',
-              sala: h.sala || 'Sala Asignada',
-              estado: estado,
-              leccionarioFirmado: !!leccionariosMap[h.id]
-            };
-          });
-
-          setClasesHoy(clasesFormateadas);
-        } else {
-          setClasesHoy([]);
-        }
-      }
-
-      // 3. Obtener Cursos donde el profesor hace clases (para el Muro de Anuncios)
-      const { data: asignaturasData } = await supabase
-        .from('asignaturas')
-        .select('id_curso, cursos(nombre)')
-        .eq('rut_profesor', rutProfesor);
-      
-      if (asignaturasData) {
-        const uniqueCursosMap = new Map();
-        asignaturasData.forEach(asig => {
-          if (asig.cursos) {
-            uniqueCursosMap.set(asig.id_curso, asig.cursos.nombre);
-          }
-        });
-        const cursosList = Array.from(uniqueCursosMap, ([id, nombre]) => ({ id, nombre }));
-        setMisCursos(sortCursos(cursosList));
-      }
-
-      // 4. Cargar Anuncios del Profesor (Primera Página)
-      setAnunciosPage(0);
-      setHasMoreAnuncios(true);
-      await fetchAnuncios(rutProfesor, 0, true);
-
-    } catch (error) {
-      console.error('Error cargando dashboard del profesor:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const generarReporteAsistenciaPDF = async () => {
     if (!profesorJefe.idCurso) return;
@@ -525,14 +337,33 @@ export default function ProfesorDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
-          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando panel de control...</p>
+      <div className="flex-1 p-4 sm:p-8 space-y-8">
+        <div className="flex flex-col mb-8">
+          <SkeletonBase className="h-8 w-64 mb-2" />
+          <SkeletonBase className="h-4 w-96" />
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <SkeletonBase className="h-32 w-full rounded-2xl" />
+              <SkeletonBase className="h-32 w-full rounded-2xl" />
+            </div>
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
+          </div>
+          <div className="space-y-6">
+             <SkeletonCard />
+          </div>
         </div>
       </div>
     );
   }
+
+  if (isError) return <div className="p-8 text-red-500">Error al cargar datos del dashboard.</div>;
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">

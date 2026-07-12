@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AlumnoHorario() {
+  const { user } = useAuth();
   const [diaFiltro, setDiaFiltro] = useState('Hoy'); 
   const [horarioCompleto, setHorarioCompleto] = useState([]);
   const [proximasEvaluaciones, setProximasEvaluaciones] = useState([]);
@@ -15,12 +17,10 @@ export default function AlumnoHorario() {
   const diaHoy = diaActualReal === 'Sábado' || diaActualReal === 'Domingo' ? 'Lunes' : diaActualReal;
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const user = JSON.parse(loggedUserJSON);
+    if (user) {
       cargarDatos(user.rut);
     }
-  }, []);
+  }, [user]);
 
   const cargarDatos = async (rutAlumno) => {
     setIsLoading(true);

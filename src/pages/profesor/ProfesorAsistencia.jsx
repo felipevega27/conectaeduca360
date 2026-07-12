@@ -6,8 +6,10 @@ import FichaAlumnoDrawer from '../../components/FichaAlumnoDrawer';
 import { SkeletonCard, SkeletonRow } from '../../components/SkeletonLoader';
 import BackdropLoader from '../../components/BackdropLoader';
 import { notificarPorRol } from '../../utils/notificacionesUtils';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorAsistencia() {
+  const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -55,7 +57,7 @@ export default function ProfesorAsistencia() {
     const cargarClasesDeHoy = async () => {
         setIsLoadingClases(true);
         try {
-            const loggedUser = JSON.parse(localStorage.getItem('userLogged'));
+            
             const rutProfesor = loggedUser.rut;
             const diaHoy = getDiaHoy();
 
@@ -254,7 +256,7 @@ export default function ProfesorAsistencia() {
         setIsSigning(true);
         setErrorClave('');
         try {
-            const loggedUser = JSON.parse(localStorage.getItem('userLogged'));
+            
 
             const { data: perfil, error: errPerfil } = await supabase
                 .from('perfiles')
@@ -283,7 +285,7 @@ export default function ProfesorAsistencia() {
         const toastId = toast.loading('Firmando y enviando datos...');
 
         try {
-            const loggedUser = JSON.parse(localStorage.getItem('userLogged'));
+            
             const rutProfesor = loggedUser.rut;
             const hoyISO = new Date().toISOString().split('T')[0];
 

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorJefatura() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [curso, setCurso] = useState(null);
   const [alumnos, setAlumnos] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -14,15 +15,12 @@ export default function ProfesorJefatura() {
   const [totalAnotacionesNegativas, setTotalAnotacionesNegativas] = useState(0);
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarJefatura(parsedUser.rut);
+    if (user) {
+      cargarJefatura(user.rut);
     } else {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const cargarJefatura = async (rutProfesor) => {
     try {

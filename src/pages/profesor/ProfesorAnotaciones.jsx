@@ -7,10 +7,10 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import BackdropLoader from '../../components/BackdropLoader';
 import { notificarPorRol, notificarUsuario } from '../../utils/notificacionesUtils';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorAnotaciones() {
-  const [user, setUser] = useState(null);
-
+  const { user } = useAuth();
   // --- ESTADOS DEL FORMULARIO ---
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAlumno, setSelectedAlumno] = useState(null);
@@ -32,16 +32,13 @@ export default function ProfesorAnotaciones() {
   const PAGE_SIZE = 10;
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarAlumnosProfesor(parsedUser.rut);
+    if (user) {
+      cargarAlumnosProfesor(user.rut);
       setAnotacionesPage(0);
       setHasMoreAnotaciones(true);
-      cargarHistorialReciente(parsedUser.rut, 0, true);
+      cargarHistorialReciente(user.rut, 0, true);
     }
-  }, []);
+  }, [user]);
 
   const cargarAlumnosProfesor = async (rutProfesor) => {
     try {

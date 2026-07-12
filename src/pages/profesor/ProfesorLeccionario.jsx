@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorLeccionario() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [asignaturas, setAsignaturas] = useState([]);
   const [selectedAsignatura, setSelectedAsignatura] = useState('');
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
@@ -43,17 +44,14 @@ export default function ProfesorLeccionario() {
   ];
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarAsignaturas(parsedUser.rut);
-      cargarUltimosRegistros(parsedUser.rut);
+    if (user) {
+      cargarAsignaturas(user.rut);
+      cargarUltimosRegistros(user.rut);
       setHistorialPage(0);
       setHasMoreHistorial(true);
-      cargarHistorialCompleto(parsedUser.rut, 0, true);
+      cargarHistorialCompleto(user.rut, 0, true);
     }
-  }, []);
+  }, [user]);
 
   const cargarAsignaturas = async (rutProfesor) => {
     try {

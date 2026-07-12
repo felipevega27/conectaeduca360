@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AlumnoAnotaciones() {
+  const { user } = useAuth();
   const [anotaciones, setAnotaciones] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const user = JSON.parse(loggedUserJSON);
+    if (user) {
       cargarAnotaciones(user.rut);
     }
-  }, []);
+  }, [user]);
 
   const cargarAnotaciones = async (rutAlumno) => {
     setIsLoading(true);

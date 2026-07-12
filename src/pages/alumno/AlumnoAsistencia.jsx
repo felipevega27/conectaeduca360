@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AlumnoAsistencia() {
+  const { user } = useAuth();
   // --- CONTROL DE ROLES (LA REGLA LEGAL) ---
   const [userRole, setUserRole] = useState('alumno'); 
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     // Leemos quién inició sesión realmente
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const user = JSON.parse(loggedUserJSON);
+    if (user) {
       setUserRole(user.role || user.rol || 'alumno');
       setCurrentUser(user);
       cargarDatos(user.rut);
     }
-  }, []);
+  }, [user]);
 
   // --- ESTADOS INTERACTIVOS ---
   const [isModalOpen, setIsModalOpen] = useState(false);

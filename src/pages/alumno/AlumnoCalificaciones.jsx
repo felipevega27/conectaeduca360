@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AlumnoCalificaciones() {
+  const { user } = useAuth();
   const [asignaturas, setAsignaturas] = useState([]);
   const [promedioGeneral, setPromedioGeneral] = useState('0.0');
   const [asignaturasRiesgo, setAsignaturasRiesgo] = useState(0);
@@ -9,9 +11,7 @@ export default function AlumnoCalificaciones() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const user = JSON.parse(loggedUserJSON);
+    if (user) {
       cargarCalificaciones(user.rut);
     }
   }, [semestreActivo]);

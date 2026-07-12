@@ -1,189 +1,60 @@
-import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../../config/supabaseClient';
+import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import CertificadoAlumnoRegular from '../../components/documentos/CertificadoAlumnoRegular';
+import { useAuth } from '../../context/AuthContext';
+import { useAlumnoDashboardQuery } from '../../hooks/queries/useAlumnoDashboardQuery';
+import { SkeletonBase, SkeletonCard, SkeletonRow } from '../../components/SkeletonLoader';
 
 export default function AlumnoDashboard() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Estados Reales
-  const [alumnoData, setAlumnoData] = useState({
-    cursoNombre: 'Cargando...',
-    asistencia: 0,
-    promedioGeneral: 0,
-    anotacionesNegativas: 0,
-    anotacionesPositivas: 0,
-    faltasInjustificadas: 0
-  });
-
-  const [ultimasNotas, setUltimasNotas] = useState([]);
-  const [avisosMuro, setAvisosMuro] = useState([]);
-  const [anotaciones, setAnotaciones] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Estados y refs para Certificado
-  const [alumnoInfo, setAlumnoInfo] = useState(null);
-  const [configColegio, setConfigColegio] = useState(null);
+  const { data, isLoading, isError } = useAlumnoDashboardQuery(user?.rut, user);
   const certificadoRef = useRef(null);
 
   const handlePrint = useReactToPrint({
     contentRef: certificadoRef,
     documentTitle: 'Certificado_Alumno_Regular',
   });
-
-  useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarDatos(parsedUser.rut, parsedUser);
-    }
-  }, []);
-
-  const cargarDatos = async (rutAlumno, currentUser) => {
-    setIsLoading(true);
-    try {
-      // 1. Obtener Matrícula y Curso
-      const { data: matricula } = await supabase
-        .from('matriculas')
-        .select('id_curso, cursos(nombre)')
-        .eq('rut_alumno', rutAlumno)
-        .maybeSingle();
-
-      let cursoId = null;
-      let cursoNombre = 'Sin Curso';
-      if (matricula) {
-        cursoId = matricula.id_curso;
-        cursoNombre = matricula.cursos?.nombre || 'Sin Curso';
-      }
-
-      // 2. Obtener Asistencia
-      const { data: asistencias } = await supabase
-        .from('asistencia_alumnos')
-        .select('estado, justificado')
-        .eq('rut_alumno', rutAlumno);
-      
-      let porcentajeAsistencia = 0;
-      let faltasInjustificadas = 0;
-      if (asistencias && asistencias.length > 0) {
-        const presentes = asistencias.filter(a => a.estado.toLowerCase() === 'presente' || a.estado.toLowerCase() === 'atraso').length;
-        faltasInjustificadas = asistencias.filter(a => a.estado.toLowerCase() === 'ausente' && a.justificado !== true).length;
-        porcentajeAsistencia = Math.round((presentes / asistencias.length) * 100);
-      }
-
-      // 3. Obtener Anotaciones (Negativas y Recientes)
-      const { data: anotacionesData } = await supabase
-        .from('anotaciones')
-        .select('*, perfiles!rut_profesor(nombre)')
-        .eq('rut_alumno', rutAlumno)
-        .order('fecha', { ascending: false });
-      
-      let negativasCount = 0;
-      let positivasCount = 0;
-      let ultimasAnot = [];
-      if (anotacionesData) {
-        negativasCount = anotacionesData.filter(a => a.tipo.toLowerCase() === 'negativa').length;
-        positivasCount = anotacionesData.filter(a => a.tipo.toLowerCase() === 'positiva').length;
-        ultimasAnot = anotacionesData.slice(0, 3).map(a => ({
-          id: a.id,
-          tipo: a.tipo.toLowerCase(),
-          descripcion: a.descripcion,
-          fecha: new Date(a.fecha).toLocaleDateString('es-CL'),
-          profesor: a.perfiles?.nombre || 'Profesor'
-        }));
-      }
-      setAnotaciones(ultimasAnot);
-
-      // 4. Obtener Calificaciones y Calcular Promedio General
-      const { data: calificacionesData } = await supabase
-        .from('notas')
-        .select('*')
-        .eq('rut_alumno', rutAlumno)
-        .order('fecha', { ascending: false });
-      
-      let promedio = 0;
-      let notasRecientes = [];
-      if (calificacionesData && calificacionesData.length > 0) {
-        const sumaNotas = calificacionesData.reduce((acc, curr) => acc + (curr.nota || 0), 0);
-        promedio = sumaNotas / calificacionesData.length;
-        
-        // Obtener Asignaturas y Evaluaciones para las 3 notas más recientes
-        const recientes = calificacionesData.slice(0, 3);
-        const asignaturasIds = [...new Set(recientes.map(n => n.id_asignatura).filter(Boolean))];
-        const evaluacionesIds = [...new Set(recientes.map(n => n.id_evaluacion).filter(Boolean))];
-        
-        let asignaturasMap = {};
-        let evaluacionesMap = {};
-        
-        if (asignaturasIds.length > 0) {
-          const { data: asigData } = await supabase.from('asignaturas').select('id, nombre').in('id', asignaturasIds);
-          if (asigData) asigData.forEach(a => asignaturasMap[a.id] = a.nombre);
-        }
-        if (evaluacionesIds.length > 0) {
-          const { data: evalData } = await supabase.from('evaluaciones').select('id, nombre').in('id', evaluacionesIds);
-          if (evalData) evalData.forEach(e => evaluacionesMap[e.id] = e.nombre);
-        }
-
-        notasRecientes = recientes.map(c => ({
-          id: c.id,
-          asignatura: asignaturasMap[c.id_asignatura] || 'Desconocida',
-          evaluacion: evaluacionesMap[c.id_evaluacion] || 'Evaluación',
-          nota: c.nota,
-          fecha: new Date(c.created_at || c.fecha).toLocaleDateString('es-CL')
-        }));
-      }
-      setUltimasNotas(notasRecientes);
-
-      setAlumnoData({
-        cursoNombre: cursoNombre,
-        asistencia: porcentajeAsistencia,
-        promedioGeneral: parseFloat(promedio.toFixed(1)),
-        anotacionesNegativas: negativasCount,
-        anotacionesPositivas: positivasCount,
-        faltasInjustificadas: faltasInjustificadas
-      });
-
-      // 5. Obtener Avisos (Muro de Avisos del Curso)
-      if (cursoId) {
-        const { data: avisos } = await supabase
-          .from('anuncios_curso')
-          .select('*, perfiles!rut_profesor(nombre)')
-          .eq('id_curso', cursoId)
-          .order('fecha_creacion', { ascending: false });
-        
-        if (avisos) {
-          setAvisosMuro(avisos);
-        }
-      }
-
-      // 6. Datos para el certificado
-      setAlumnoInfo({
-        rut: rutAlumno,
-        nombre: currentUser?.name || currentUser?.nombre || 'Alumno',
-        curso: cursoNombre
-      });
-      const { data: config } = await supabase.from('configuracion_colegio').select('*').limit(1).maybeSingle();
-      setConfigColegio(config || {});
-
-    } catch (error) {
-      console.error('Error cargando datos del dashboard:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
-          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando Resumen Escolar...</p>
+      <div className="flex-1 p-4 sm:p-8 space-y-8">
+        <div className="flex justify-between items-center mb-8">
+          <div className="space-y-2">
+            <SkeletonBase className="h-8 w-64" />
+            <SkeletonBase className="h-4 w-96" />
+          </div>
+          <SkeletonBase className="h-10 w-48 rounded-lg" />
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <SkeletonBase className="h-28 w-full rounded-2xl" />
+          <SkeletonBase className="h-28 w-full rounded-2xl" />
+          <SkeletonBase className="h-28 w-full rounded-2xl" />
+          <SkeletonBase className="h-28 w-full rounded-2xl" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+            </div>
+          </div>
         </div>
       </div>
     );
   }
+
+  if (isError || !data) return <div className="p-8 text-red-500">Error al cargar datos.</div>;
+
+  const { alumnoData, ultimasNotas, avisosMuro, anotaciones, alumnoInfo, configColegio } = data;
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0">

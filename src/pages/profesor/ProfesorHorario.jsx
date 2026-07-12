@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorHorario() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [horario, setHorario] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -19,13 +20,10 @@ export default function ProfesorHorario() {
   ];
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarHorario(parsedUser.rut);
+    if (user) {
+      cargarHorario(user.rut);
     }
-  }, []);
+  }, [user]);
 
   const cargarHorario = async (rutProfesor) => {
     try {

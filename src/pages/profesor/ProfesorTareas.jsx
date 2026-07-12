@@ -6,9 +6,10 @@ import BackdropLoader from '../../components/BackdropLoader';
 import { SkeletonCard } from '../../components/SkeletonLoader';
 import { perteneceAlSemestre } from '../../utils/dateUtils';
 import { sortCursos } from '../../utils/sortUtils';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorTareas() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [cursoFiltro, setCursoFiltro] = useState('Todos');
@@ -37,12 +38,9 @@ export default function ProfesorTareas() {
   const misCursos = ['Todos', ...sortCursos(Array.from(new Set(asignaturasProfesor.map(a => a.cursos?.nombre).filter(Boolean))))];
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarAsignaturas(parsedUser.rut);
-      cargarTareas(parsedUser.rut);
+    if (user) {
+      cargarAsignaturas(user.rut);
+      cargarTareas(user.rut);
     }
   }, [semestreActivo]);
 

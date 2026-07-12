@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 import logoTexto from '../assets/logo_texto.png';
 import logoImg from '../assets/logo.png';
 import TopHeader from '../components/TopHeader';
 
 export default function ApoderadoLayout() {
-  const [user, setUser] = useState({ nombre: 'Claudia Pérez', rol: 'Apoderado Titular', pupilo: 'Martina Fernández' });
+  const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
@@ -49,12 +50,10 @@ export default function ApoderadoLayout() {
     setIsLogoutModalOpen(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setIsLoggingOut(true);
-    setTimeout(() => {
-      localStorage.removeItem('userLogged');
-      window.location.href = '/';
-    }, 1500);
+    await new Promise(resolve => setTimeout(resolve, 800));
+    logout();
   };
 
   return (

@@ -3,25 +3,22 @@ import { supabase } from '../../config/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { SkeletonRow } from '../../components/SkeletonLoader';
+import { useAuth } from '../../context/AuthContext';
 
 export default function NotificacionesPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [notificaciones, setNotificaciones] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState(null);
-
   // Pagination and filtering states could be added here later
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      fetchNotificaciones(parsedUser.rut);
+    if (user) {
+      fetchNotificaciones(user.rut);
     } else {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const fetchNotificaciones = async (rut) => {
     try {

@@ -3,8 +3,10 @@ import { supabase } from '../../config/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast';
 import portadaImg from '../../assets/FONDO PERFILES.png';
 import { SkeletonCard, SkeletonBase } from '../../components/SkeletonLoader';
+import { useAuth } from '../../context/AuthContext';
 
 export default function MiPerfil() {
+  const { user } = useAuth();
   const [sessionUser, setSessionUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,15 +31,13 @@ export default function MiPerfil() {
   });
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setSessionUser(parsedUser);
-      fetchPerfil(parsedUser.rut);
+    if (user) {
+      setSessionUser(user);
+      fetchPerfil(user.rut);
     } else {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const fetchPerfil = async (rut) => {
     try {
@@ -148,7 +148,8 @@ export default function MiPerfil() {
       
       if (sessionUser) {
         const updatedSession = { ...sessionUser, avatar_url: publicUrl };
-        localStorage.setItem('userLogged', JSON.stringify(updatedSession));
+        // No update needed since user is immutable context state for now
+        // Or dispatch an update if supported.
       }
 
       toast.success("Foto de perfil actualizada exitosamente.");

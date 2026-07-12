@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../config/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ApoderadoDashboard() {
+  const { user } = useAuth();
   const [pupilos, setPupilos] = useState([]);
   const [pupiloActivo, setPupiloActivo] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalJustificar, setIsModalJustificar] = useState(false);
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const user = JSON.parse(loggedUserJSON);
+    if (user) {
       cargarPupilos(user.rut);
     }
-  }, []);
+  }, [user]);
 
   const cargarPupilos = async (rutApoderado) => {
     setIsLoading(true);

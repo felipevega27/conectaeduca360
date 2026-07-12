@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 import logoTexto from '../assets/logo_texto.png';
 import logoImg from '../assets/logo.png';
 import UserAvatar from '../components/UserAvatar';
 import TopHeader from '../components/TopHeader';
 
 export default function DirectorLayout() {
-  const [user, setUser] = useState(null);
+  const { user, logout } = useAuth();
   const [avatarLayout, setAvatarLayout] = useState(null);
 
   // Estado para el menú móvil
@@ -35,19 +36,15 @@ export default function DirectorLayout() {
   const location = useLocation();
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-
+    if (user) {
       // Fetch fresh avatar
       const fetchAvatar = async () => {
         try {
-          const { data } = await supabase.from('perfiles').select('avatar_url').eq('rut', parsedUser.rut || parsedUser.id).single();
+          const { data } = await supabase.from('perfiles').select('avatar_url').eq('rut', user.rut || user.id).single();
           if (data && data.avatar_url) {
             setAvatarLayout(data.avatar_url);
-          } else if (parsedUser.avatar_url) {
-            setAvatarLayout(parsedUser.avatar_url);
+          } else if (user.avatar_url) {
+            setAvatarLayout(user.avatar_url);
           }
         } catch (e) {
           console.error("Error fetching avatar for layout", e);
@@ -55,7 +52,7 @@ export default function DirectorLayout() {
       };
       fetchAvatar();
     }
-  }, []);
+  }, [user]);
 
   // Efecto para aplicar o quitar la clase dark del HTML
   useEffect(() => {
@@ -87,12 +84,10 @@ export default function DirectorLayout() {
     setIsLogoutModalOpen(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setIsLoggingOut(true);
-    setTimeout(() => {
-      localStorage.removeItem('userLogged');
-      window.location.href = '/';
-    }, 1500);
+    await new Promise(resolve => setTimeout(resolve, 800));
+    logout();
   };
 
   const toggleSubmenu = (menuKey) => {

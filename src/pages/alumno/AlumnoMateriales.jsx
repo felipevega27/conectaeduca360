@@ -16,12 +16,10 @@ export default function AlumnoMateriales() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const user = JSON.parse(loggedUserJSON);
-      cargarAulaVirtual(user.rut);
+    if (user) {
+      cargarAulaVirtual(user.rut || user.id);
     }
-  }, []);
+  }, [user]);
 
   const cargarAulaVirtual = async (rutAlumno) => {
     setIsLoading(true);
@@ -132,9 +130,6 @@ export default function AlumnoMateriales() {
     setIsUploading(true);
     
     try {
-      const loggedUserJSON = localStorage.getItem('userLogged');
-      const user = JSON.parse(loggedUserJSON);
-
       let publicUrl = null;
       if (archivo) {
         const fileExt = archivo.name.split('.').pop();

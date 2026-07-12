@@ -7,9 +7,10 @@ import { SkeletonCard, SkeletonBase } from '../../components/SkeletonLoader';
 import { notificarPorRol } from '../../utils/notificacionesUtils';
 import { perteneceAlSemestre } from '../../utils/dateUtils';
 import { sortCursos } from '../../utils/sortUtils';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorPlanificaciones() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [asignaturas, setAsignaturas] = useState([]);
   const [cursoActual, setCursoActual] = useState('');
@@ -33,13 +34,10 @@ export default function ProfesorPlanificaciones() {
   });
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarAsignaturas(parsedUser.rut);
+    if (user) {
+      cargarAsignaturas(user.rut);
     }
-  }, []);
+  }, [user]);
 
   const cargarAsignaturas = async (rut) => {
     try {

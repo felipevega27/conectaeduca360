@@ -1,20 +1,19 @@
 import { Navigate, Outlet } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function PrivateRoute({ allowedRoles }) {
-  // 1. Verificamos si hay un usuario logueado en el almacenamiento local
-  const userJSON = localStorage.getItem('userLogged');
+  const { user, loading } = useAuth();
 
-  // Si no hay sesión activa, lo pateamos a la pantalla de Login
-  if (!userJSON) {
-    return <Navigate to="/" replace />;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
   }
 
-  const user = JSON.parse(userJSON);
-
-  // Verificamos si la sesión expiró (8 horas = 8 * 60 * 60 * 1000 milisegundos)
-  const OCHO_HORAS = 8 * 60 * 60 * 1000;
-  if (user.loginTimestamp && (new Date().getTime() - user.loginTimestamp > OCHO_HORAS)) {
-    localStorage.removeItem('userLogged');
+  // Si no hay usuario logueado, lo pateamos a la pantalla de Login
+  if (!user) {
     return <Navigate to="/" replace />;
   }
 

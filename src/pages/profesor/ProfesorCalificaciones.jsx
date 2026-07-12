@@ -4,9 +4,10 @@ import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import FichaAlumnoDrawer from '../../components/FichaAlumnoDrawer';
 import { sortCursos } from '../../utils/sortUtils';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorCalificaciones() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [misAsignaturas, setMisAsignaturas] = useState([]);
@@ -25,13 +26,10 @@ export default function ProfesorCalificaciones() {
   const [rutFichaSeleccionada, setRutFichaSeleccionada] = useState(null);
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarMisAsignaturas(parsedUser.rut);
+    if (user) {
+      cargarMisAsignaturas(user.rut);
     }
-  }, []);
+  }, [user]);
 
   const cargarMisAsignaturas = async (rutProfesor) => {
     try {

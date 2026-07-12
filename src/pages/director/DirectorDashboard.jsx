@@ -8,8 +8,9 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { initSchoolPdf, addPdfFooter } from '../../utils/pdfUtils';
 import toast, { Toaster } from 'react-hot-toast';
-import useDirectorDashboard from '../../hooks/useDirectorDashboard';
-import { SkeletonRow } from '../../components/SkeletonLoader';
+import { useDirectorDashboardQuery } from '../../hooks/queries/useDirectorDashboardQuery';
+import { SkeletonBase, SkeletonCard, SkeletonRow } from '../../components/SkeletonLoader';
+
 import BackdropLoader from '../../components/BackdropLoader';
 
 export default function DirectorDashboard() {
@@ -406,14 +407,34 @@ export default function DirectorDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-red-500 border-r-green-500 border-b-yellow-500 rounded-full animate-spin"></div>
-          <p className="text-gray-600 dark:text-gray-400 font-medium tracking-wide">Cargando panel de control...</p>
+      <div className="flex-1 p-4 sm:p-8 space-y-6">
+        <div className="flex justify-between items-center mb-6">
+          <SkeletonBase className="h-8 w-64" />
+          <SkeletonBase className="h-10 w-48 rounded-lg" />
+        </div>
+        
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <SkeletonBase className="h-40 w-full rounded-2xl" />
+          <SkeletonBase className="h-40 w-full rounded-2xl" />
+          <SkeletonBase className="h-40 w-full rounded-2xl" />
+          <SkeletonBase className="h-40 w-full rounded-2xl" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <SkeletonBase className="h-[400px] w-full rounded-2xl" />
+            <SkeletonBase className="h-[300px] w-full rounded-2xl" />
+          </div>
+          <div className="space-y-6">
+            <SkeletonBase className="h-64 w-full rounded-2xl" />
+            <SkeletonBase className="h-64 w-full rounded-2xl" />
+          </div>
         </div>
       </div>
     );
   }
+
+  if (isError) return <div className="p-8 text-red-500">Error al cargar datos del panel directivo.</div>;
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900 transition-colors duration-300 pb-10 px-4 sm:px-8 pt-0 relative">

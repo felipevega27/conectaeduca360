@@ -3,8 +3,10 @@ import { supabase } from '../../config/supabaseClient';
 import { initSchoolPdf, addPdfFooter } from '../../utils/pdfUtils';
 import autoTable from 'jspdf-autotable';
 import BackdropLoader from '../../components/BackdropLoader';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorCopiloto() {
+  const { user } = useAuth();
   const [herramienta, setHerramienta] = useState('rubrica');
   const [tema, setTema] = useState('');
   const [nivelObjetivo, setNivelObjetivo] = useState('1º Básico');
@@ -19,12 +21,12 @@ export default function ProfesorCopiloto() {
   const [asignaturas, setAsignaturas] = useState([]);
 
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('userLogged'));
+    
     if (user) {
       setUserData(user);
       cargarAsignaturas(user.rut);
     }
-  }, []);
+  }, [user]);
 
   const cargarAsignaturas = async (rut) => {
     const { data } = await supabase.from('asignaturas').select('nombre').eq('rut_profesor', rut);

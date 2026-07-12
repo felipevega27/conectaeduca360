@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 // Componentes
 import RecoverPasswordModal from './RecoverPasswordModal';
@@ -16,6 +17,7 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { login, user } = useAuth();
   
   // --- ESTADO RECUPERACIÓN ---
   const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
@@ -28,15 +30,13 @@ export default function Login() {
 
   // --- REDIRECCIÓN AUTOMÁTICA SI YA HAY SESIÓN ---
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const user = JSON.parse(loggedUserJSON);
+    if (user) {
       if (user.role === 'director') navigate('/panel/director');
       else if (user.role === 'profesor') navigate('/panel/profesor');
       else if (user.role === 'apoderado') navigate('/panel/apoderado');
       else navigate('/panel/alumno');
     }
-  }, [navigate]);
+  }, [user, navigate]);
 
   // --- FUNCIÓN PARA FORMATEAR RUT CHILENO ---
   const formatRUT = (value) => {
@@ -136,22 +136,7 @@ export default function Login() {
 
   // --- FLUJO 3: ENRUTAMIENTO FINAL ---
   const iniciarSesionFinal = (usuario) => {
-    // 1. Eliminar la clave por seguridad antes de guardar en localStorage
-    const { clave, ...usuarioSeguro } = usuario;
-
-    const userToSave = {
-      ...usuarioSeguro,
-      role: usuarioSeguro.rol || usuarioSeguro.role || 'alumno',
-      loginTimestamp: new Date().getTime() // 2. Guardar el timestamp para expiración (8 horas)
-    };
-    localStorage.setItem('userLogged', JSON.stringify(userToSave));
-
-    switch (userToSave.role) {
-      case 'director': navigate('/panel/director'); break;
-      case 'profesor': navigate('/panel/profesor'); break;
-      case 'apoderado': navigate('/panel/apoderado'); break;
-      case 'alumno': default: navigate('/panel/alumno'); break;
-    }
+    login(usuario);
   };
 
   const fillTestData = (role) => {

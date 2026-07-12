@@ -6,11 +6,11 @@ import logoTexto from '../../assets/logo_texto.png';
 import BackdropLoader from '../../components/BackdropLoader';
 import { notificarCurso } from '../../utils/notificacionesUtils';
 import { sortCursos } from '../../utils/sortUtils';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfesorTareasNueva() {
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
-
   const [misAsignaturas, setMisAsignaturas] = useState([]);
   const [selectedAsignaturaId, setSelectedAsignaturaId] = useState('');
 
@@ -68,13 +68,10 @@ export default function ProfesorTareasNueva() {
   };
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-      cargarAsignaturas(parsedUser.rut);
+    if (user) {
+      cargarAsignaturas(user.rut);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== instruccionesForm) {

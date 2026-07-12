@@ -3,8 +3,10 @@ import { supabase } from '../../config/supabaseClient';
 import { useReactToPrint } from 'react-to-print';
 import CertificadoAlumnoRegular from '../../components/documentos/CertificadoAlumnoRegular';
 import CertificadoNotas from '../../components/documentos/CertificadoNotas';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AlumnoDocumentos() {
+  const { user } = useAuth();
   const [alumnoInfo, setAlumnoInfo] = useState(null);
   const [notasData, setNotasData] = useState(null);
   const [configColegio, setConfigColegio] = useState(null);
@@ -24,12 +26,10 @@ export default function AlumnoDocumentos() {
   });
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const user = JSON.parse(loggedUserJSON);
+    if (user) {
       cargarDatos(user);
     }
-  }, []);
+  }, [user]);
 
   const cargarDatos = async (user) => {
     setIsLoading(true);

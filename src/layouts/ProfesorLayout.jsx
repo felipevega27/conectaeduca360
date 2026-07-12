@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
-import { mockUsers } from '../utils/mockUsers';
 import { supabase } from '../config/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 import logoTexto from '../assets/logo_texto.png';
 import logoImg from '../assets/logo.png';
 import TopHeader from '../components/TopHeader';
+
 export default function ProfesorLayout() {
-  const [user, setUser] = useState(null);
+  const { user, logout } = useAuth();
   const [avatarLayout, setAvatarLayout] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -25,24 +26,19 @@ export default function ProfesorLayout() {
   const location = useLocation();
 
   useEffect(() => {
-    // Simular carga de usuario (En el futuro vendrá del backend)
-    const loggedUserJSON = localStorage.getItem('userLogged');
-    if (loggedUserJSON) {
-      const parsedUser = JSON.parse(loggedUserJSON);
-      setUser(parsedUser);
-
+    if (user) {
       // Fetch fresh avatar and jefatura
       const fetchUserData = async () => {
         try {
-          const { data } = await supabase.from('perfiles').select('avatar_url').eq('rut', parsedUser.rut || parsedUser.id).single();
+          const { data } = await supabase.from('perfiles').select('avatar_url').eq('rut', user.rut || user.id).single();
           if (data && data.avatar_url) {
             setAvatarLayout(data.avatar_url);
-          } else if (parsedUser.avatar_url) {
-            setAvatarLayout(parsedUser.avatar_url);
+          } else if (user.avatar_url) {
+            setAvatarLayout(user.avatar_url);
           }
 
           // Check jefatura
-          const { data: cursoJefatura } = await supabase.from('cursos').select('id').eq('rut_profesor_jefe', parsedUser.rut || parsedUser.id).maybeSingle();
+          const { data: cursoJefatura } = await supabase.from('cursos').select('id').eq('rut_profesor_jefe', user.rut || user.id).maybeSingle();
           if (cursoJefatura) {
             setIsJefe(true);
           }
@@ -51,12 +47,8 @@ export default function ProfesorLayout() {
         }
       };
       fetchUserData();
-    } else {
-      // Obtenemos el profesor de nuestro archivo de prueba si no hay sesión
-      const fallbackUser = mockUsers.find(u => u.role === 'profesor');
-      setUser(fallbackUser || { nombre: 'Profesor Invitado', role: 'Profesor' });
     }
-  }, []);
+  }, [user]);
 
   // Efecto para aplicar o quitar la clase dark del HTML
   useEffect(() => {
@@ -86,12 +78,10 @@ export default function ProfesorLayout() {
     setIsLogoutModalOpen(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setIsLoggingOut(true);
-    setTimeout(() => {
-      localStorage.removeItem('userLogged');
-      window.location.href = '/';
-    }, 1500);
+    await new Promise(resolve => setTimeout(resolve, 800));
+    logout();
   };
 
   const toggleSubmenu = (menuKey) => {
