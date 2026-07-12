@@ -12,12 +12,12 @@ export function AuthProvider({ children }) {
   const OCHO_HORAS = 8 * 60 * 60 * 1000;
 
   useEffect(() => {
-    const loggedUserJSON = localStorage.getItem('userLogged');
+    const loggedUserJSON = localStorage.getItem('userLogged') || sessionStorage.getItem('userLogged');
     if (loggedUserJSON) {
       try {
         const parsedUser = JSON.parse(loggedUserJSON);
         
-        // Verificamos si expiró
+        // Verificamos si expiró (solo para los que no tienen "Recordarme" indefinido, o lo aplicamos a todos)
         if (parsedUser.loginTimestamp && (new Date().getTime() - parsedUser.loginTimestamp > OCHO_HORAS)) {
           logout();
         } else {
@@ -30,8 +30,8 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = (usuario) => {
-    // 1. Eliminar la clave por seguridad antes de guardar
+  const login = (usuario, recordar = false) => {
+    // 1. Eliminar la clave por seguridad antes de guardar localmente
     const { clave, ...usuarioSeguro } = usuario;
     
     const userToSave = {
@@ -40,7 +40,14 @@ export function AuthProvider({ children }) {
       loginTimestamp: new Date().getTime()
     };
     
-    localStorage.setItem('userLogged', JSON.stringify(userToSave));
+    // Si recordar es true, usamos localStorage (persiste tras cerrar el navegador).
+    // Si recordar es false, usamos sessionStorage (se borra al cerrar la pestaña).
+    if (recordar) {
+      localStorage.setItem('userLogged', JSON.stringify(userToSave));
+    } else {
+      sessionStorage.setItem('userLogged', JSON.stringify(userToSave));
+    }
+    
     setUser(userToSave);
 
     // Redirección por rol
@@ -54,6 +61,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem('userLogged');
+    sessionStorage.removeItem('userLogged');
     setUser(null);
     navigate('/', { replace: true });
   };

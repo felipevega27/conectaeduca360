@@ -9,6 +9,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useProfesorDashboardQuery } from '../../hooks/queries/useProfesorDashboardQuery';
 import { SkeletonBase, SkeletonCard, SkeletonRow } from '../../components/SkeletonLoader';
 
+const getDiaHoy = () => {
+  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  return dias[new Date().getDay()];
+};
+
 export default function ProfesorDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();

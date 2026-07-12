@@ -16,6 +16,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [recordar, setRecordar] = useState(false); // NUEVO ESTADO RECORDARME
   const navigate = useNavigate();
   const { login, user } = useAuth();
   
@@ -64,6 +65,7 @@ export default function Login() {
     setError(null);
 
     try {
+      // Volvemos a consultar la tabla pública perfiles que NUNCA da error 500
       const { data: usuario, error: supabaseError } = await supabase
         .from('perfiles')
         .select('*')
@@ -112,15 +114,16 @@ export default function Login() {
 
     setIsLoading(true);
     try {
+      // Guardamos la nueva clave en perfiles directamente
       const { error: updateError } = await supabase
         .from('perfiles')
         .update({
-          clave: newPassword,
+          clave: newPassword, 
           requiere_cambio_clave: false
         })
         .eq('rut', tempUser.rut);
 
-      if (updateError) throw new Error("Hubo un error al guardar tu nueva contraseña.");
+      if (updateError) throw new Error("Hubo un error al guardar el estado de tu nueva contraseña.");
 
       await new Promise(resolve => setTimeout(resolve, 1500));
 
@@ -136,7 +139,7 @@ export default function Login() {
 
   // --- FLUJO 3: ENRUTAMIENTO FINAL ---
   const iniciarSesionFinal = (usuario) => {
-    login(usuario);
+    login(usuario, recordar); 
   };
 
   const fillTestData = (role) => {
@@ -203,7 +206,7 @@ export default function Login() {
 
                 <div className="flex items-center justify-between pt-2 pb-2">
                   <div className="flex items-center">
-                    <input type="checkbox" id="remember" className="h-4 w-4 text-blue-600 border-gray-300 rounded cursor-pointer focus:ring-blue-500" />
+                    <input type="checkbox" id="remember" checked={recordar} onChange={(e) => setRecordar(e.target.checked)} className="h-4 w-4 text-blue-600 border-gray-300 rounded cursor-pointer focus:ring-blue-500" />
                     <label htmlFor="remember" className="ml-2 block text-sm font-medium text-gray-600 cursor-pointer select-none">Recordarme</label>
                   </div>
                   <button type="button" onClick={() => setIsRecoveryModalOpen(true)} className="text-sm text-blue-600 hover:text-blue-700 hover:underline font-semibold bg-transparent border-none p-0 cursor-pointer">
