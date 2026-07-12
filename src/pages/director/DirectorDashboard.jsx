@@ -3,13 +3,11 @@ import Chart from 'chart.js/auto';
 import { useNavigate } from 'react-router-dom';
 import FichaAlumnoDrawer from '../../components/FichaAlumnoDrawer';
 import { supabase } from '../../config/supabaseClient';
-import logo from '../../assets/logo.png';
-import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { initSchoolPdf, addPdfFooter } from '../../utils/pdfUtils';
 import toast, { Toaster } from 'react-hot-toast';
 import { useDirectorDashboardQuery } from '../../hooks/queries/useDirectorDashboardQuery';
-import { SkeletonBase, SkeletonCard, SkeletonRow } from '../../components/SkeletonLoader';
+import { SkeletonBase, SkeletonRow } from '../../components/SkeletonLoader';
 
 import BackdropLoader from '../../components/BackdropLoader';
 
@@ -27,19 +25,20 @@ export default function DirectorDashboard() {
   const [semestreActivo, setSemestreActivo] = useState('Primer Semestre');
 
   // --- ESTADOS BASE DE DATOS (Supabase) via HOOK ---
+  const { data, isLoading, isError } = useDirectorDashboardQuery(semestreActivo);
+
   const {
-    totalAlumnos,
-    porcentajes,
-    asistenciaGlobal,
-    alumnosRiesgo,
-    metricasUTP,
-    metricasPIE,
-    protocolosActivos,
-    alertas,
-    asistenciaMensual,
-    isLoading,
-    isUsingFallback
-  } = useDirectorDashboard(semestreActivo);
+    totalAlumnos = 0,
+    porcentajes = { regular: 0, sep: 0, pie: 0 },
+    asistenciaGlobal = 0,
+    alumnosRiesgo = 0,
+    metricasUTP = { coberturaPromedio: 0, alDia: 0, atrasados: 0, pendientes: 0, porcentajeAlDia: 0 },
+    metricasPIE = { porcentaje: 0, pendientes: 0 },
+    protocolosActivos = 0,
+    alertas = [],
+    asistenciaMensual = [0, 0, 0, 0, 0],
+    isUsingFallback = true
+  } = data || {};
 
   // --- REFERENCIAS DE GRÁFICOS ---
   const chartAreaRef = useRef(null);
